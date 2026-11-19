@@ -1213,7 +1213,7 @@
                 // 不清空、不覆盖原始 localStorage 内容；等待用户导出/恢复后再允许写入。
                 storageWriteBlocked = true;
                 console.error('本地数据无法安全读取，已阻止覆盖原始数据', e);
-                setTimeout(() => showToast('检测到本地数据异常，已暂停自动保存以保护原始数据。请先联系支持处理，勿清理浏览器数据。', 'error'), 0);
+                setTimeout(() => showToast('检测到本地数据异常，已暂停自动保存以保护原始数据。请使用完整备份口令恢复，或在数据中心手动从云端拉取；请勿清理浏览器数据。', 'error'), 0);
             }
         }
 
