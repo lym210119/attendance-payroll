@@ -6,6 +6,7 @@ on:
       - "index.html"
       - ".github/workflows/validate-html.yml"
       - "tests/payroll.test.cjs"
+      - "tests/browser-smoke.cjs"
   workflow_dispatch:
 
 jobs:
@@ -62,3 +63,23 @@ jobs:
 
       - name: Run payroll calculation regression tests
         run: node --test tests/payroll.test.cjs
+
+      - name: Install Playwright and Chromium
+        run: |
+          npm init -y
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Run browser smoke tests
+        shell: bash
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/attendance-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for attempt in {1..20}; do
+            if curl --silent --fail http://127.0.0.1:4173/ > /dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          node tests/browser-smoke.cjs
