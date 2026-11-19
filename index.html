@@ -1380,8 +1380,7 @@
 
             if (rec.type === 'paid_leave') {
                 const regHours = c.stdHours;
-                // 月薪模式的基本工资由周期汇总统一计算，避免按请假记录重复计薪。
-                const regPay = c.payMode === 'monthly' ? 0 : regHours * rate;
+                const regPay = regHours * rate;
                 return {
                     complete: true, isCrossDay: false, isLeave: true,
                     netHours: regHours, regHours, otHours: 0,
@@ -1430,7 +1429,7 @@
             } else {
                 regHours = Math.min(netHours, c.stdHours);
                 otHours = Math.max(0, netHours - c.stdHours);
-                regPay = c.payMode === 'monthly' ? 0 : regHours * rate;
+                regPay = regHours * rate;
                 otWeekdayPay = otHours * rate * c.weekdayMult;
             }
 
@@ -1923,10 +1922,7 @@
             const fullAttendVoided = c.strictFullAttend && hasUnpaidOrIncomplete && c.bonus > 0;
             const appliedBonus = attendDays > 0 && !fullAttendVoided ? c.bonus : 0;
             const appliedDeduct = attendDays > 0 ? c.deduction : 0;
-            // 月薪模式：基本工资按整个计薪周期固定计入，不依赖是否存在打卡记录。
-            const baseSalary = c.payMode === 'monthly' ? Math.max(0, Number(c.monthlySalary) || 0) : 0;
-            const displayedRegPay = baseSalary + regPay;
-            const grossPay = baseSalary + regPay + otWeekdayPay + otWeekendPay + otHolidayPay + appliedBonus;
+            const grossPay = regPay + otWeekdayPay + otWeekendPay + otHolidayPay + appliedBonus;
             const netPay = Math.max(0, grossPay - appliedDeduct);
 
             document.getElementById('valNetPay').textContent = netPay.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1938,7 +1934,7 @@
             document.getElementById('valOtWeekendH').textContent = otWeekendH.toFixed(1);
             document.getElementById('valOtHolidayH').textContent = otHolidayH.toFixed(1);
 
-            document.getElementById('valRegPay').textContent = `¥${displayedRegPay.toFixed(2)}`;
+            document.getElementById('valRegPay').textContent = `¥${regPay.toFixed(2)}`;
             document.getElementById('valOtWeekdayPay').textContent = `+¥${otWeekdayPay.toFixed(2)}`;
             document.getElementById('valOtSpecialPay').textContent = `+¥${(otWeekendPay + otHolidayPay).toFixed(2)}`;
             document.getElementById('valBonusLabel').textContent = fullAttendVoided ? '全勤补贴(缺勤取消)' : '全勤/固定补贴';
@@ -1955,7 +1951,7 @@
                 : `月薪固定计入基本工资 ¥${c.monthlySalary}；加班参考时薪 ¥${rate.toFixed(2)}/h (按21.75天折算)`;
             document.getElementById('slipAttendDays').textContent = `${attendDays} 天`;
             document.getElementById('slipHoursSplit').textContent = `${regHours.toFixed(1)}h 正常 / ${otHours.toFixed(1)}h 加班`;
-            document.getElementById('slipRegPay').textContent = `¥${displayedRegPay.toFixed(2)}`;
+            document.getElementById('slipRegPay').textContent = `¥${regPay.toFixed(2)}`;
             document.getElementById('slipOtWeekday').textContent = `+¥${otWeekdayPay.toFixed(2)}`;
             document.getElementById('slipOtSpecial').textContent = `+¥${(otWeekendPay + otHolidayPay).toFixed(2)}`;
             document.getElementById('slipBonusLabel').textContent = fullAttendVoided ? '全勤奖 (因请假/缺卡取消)' : '全勤奖 / 固定补贴';
