@@ -168,6 +168,12 @@ test("monthly unpaid leave and incomplete shifts remain unpaid", () => {
   sandbox.appState.config.payMode = "hourly";
 });
 
+test("payroll summary does not add a separate monthly base salary", () => {
+  assert.doesNotMatch(html, /const baseSalary = c\.payMode === 'monthly'/);
+  assert.match(html, /const grossPay = regPay \+ otWeekdayPay \+ otWeekendPay \+ otHolidayPay \+ appliedBonus;/);
+  assert.match(html, /valRegPay'\)\.textContent = `¥\$\{regPay\.toFixed\(2\)\}`/);
+});
+
 
 function resetPunchHarness(records) {
   snapshotCount = 0;
