@@ -1372,68 +1372,46 @@
         function handleQuickPunch(action) {
             const today = getLocalTodayStr();
             const nowTime = getLocalTimeStr();
-            saveSnapshotForUndo();
-
             const todayRecs = appState.records.filter(r => r.date === today);
             const yesterday = getYesterdayStr();
-            // 只把未下班的记录视为进行中班次；不能回退到已完成记录，
-            // 否则重复点击“下班打卡”会覆盖上一班次的真实下班时间。
+            // 只把未下班的记录视为进行中班次，避免重复打卡覆盖真实时间。
             const activeRec = appState.records
                 .filter(r => r.date >= yesterday && r.date <= today && r.startTime && !r.endTime)
                 .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`))
                 .pop();
 
+            if (action === 'in' && activeRec) {
+                const started = activeRec.date === today
+                    ? `今日已于 ${activeRec.startTime} 打过上班卡`
+                    : `${activeRec.date} 的班次仍未下班`;
+                showToast(`${started}，原始打卡时间已保留；如需修正请使用补卡/手动录入`, 'error');
+                return;
+            }
+
+            if (action === 'out' && !activeRec) {
+                showToast('没有找到进行中的上班记录，未生成虚构的上班时间；请先上班打卡，或使用补卡/手动录入', 'error');
+                return;
+            }
+
+            saveSnapshotForUndo();
+
             if (action === 'in') {
-                if (activeRec && !activeRec.endTime) {
-                    if (activeRec.date === today) {
-                        activeRec.startTime = nowTime;
-                        showToast(`已更新今日上班打卡为 ${nowTime}`, 'success', true);
-                    } else {
-                        showToast(`当前仍有 ${activeRec.date} 开始的夜班未下班，请先完成下班打卡`, 'error');
-                        return;
-                    }
-                } else if (activeRec && activeRec.endTime) {
-                    const detected = detectDayType(today);
-                    appState.records.push({
-                        id: 'id_' + Date.now(),
-                        date: today,
-                        startTime: nowTime,
-                        endTime: '',
-                        type: detected.type,
-                        note: `同日第${todayRecs.length + 1}班次`
-                    });
-                    showToast(`已开启今日第 ${todayRecs.length + 1} 班次 (${nowTime})`, 'success', true);
-                } else {
-                    const detected = detectDayType(today);
-                    appState.records.push({
-                        id: 'id_' + Date.now(),
-                        date: today,
-                        startTime: nowTime,
-                        endTime: '',
-                        type: detected.type,
-                        note: detected.holidayName ? `${detected.holidayName} 打卡` : '一键打卡'
-                    });
-                    showToast(`上班打卡成功 (${nowTime})，开始累计今日窝囊费`, 'success', true);
-                }
+                const detected = detectDayType(today);
+                appState.records.push({
+                    id: 'id_' + Date.now(),
+                    date: today,
+                    startTime: nowTime,
+                    endTime: '',
+                    type: detected.type,
+                    note: todayRecs.length ? `同日第${todayRecs.length + 1}班次` : (detected.holidayName ? `${detected.holidayName} 打卡` : '一键打卡')
+                });
+                showToast(todayRecs.length
+                    ? `已开启今日第 ${todayRecs.length + 1} 班次 (${nowTime})`
+                    : `上班打卡成功 (${nowTime})，开始累计今日窝囊费`, 'success', true);
             } else {
-                if (activeRec) {
-                    activeRec.endTime = nowTime;
-                    const m = calcRecord(activeRec);
-                    showToast(`下班打卡成功 (${nowTime})！本班次落袋 ¥${m.totalPay.toFixed(2)}`, 'success', true);
-                } else {
-                    const detected = detectDayType(today);
-                    const newRec = {
-                        id: 'id_' + Date.now(),
-                        date: today,
-                        startTime: '09:00',
-                        endTime: nowTime,
-                        type: detected.type,
-                        note: '下班打卡(自动补齐09:00)'
-                    };
-                    appState.records.push(newRec);
-                    const m = calcRecord(newRec);
-                    showToast(`下班打卡成功 (${nowTime})，今日落袋 ¥${m.totalPay.toFixed(2)}`, 'info', true);
-                }
+                activeRec.endTime = nowTime;
+                const m = calcRecord(activeRec);
+                showToast(`下班打卡成功 (${nowTime})！本班次落袋 ¥${m.totalPay.toFixed(2)}`, 'success', true);
             }
 
             currentMonth = getCycleMonthForDate(today, appState.config.cycleStartDay);
