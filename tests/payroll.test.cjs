@@ -16,7 +16,23 @@ function extractFunction(name) {
   return match[0];
 }
 
+let snapshotCount = 0;
+let saveCount = 0;
+let renderCount = 0;
+let toastMessages = [];
+
 const sandbox = {
+  document: { getElementById: () => ({ value: "" }) },
+  getLocalTodayStr: () => "2026-11-19",
+  getYesterdayStr: () => "2026-11-18",
+  getLocalTimeStr: () => "18:00",
+  saveSnapshotForUndo: () => { snapshotCount++; },
+  showToast: message => { toastMessages.push(message); },
+  detectDayType: () => ({ type: "workday", holidayName: "" }),
+  getCycleMonthForDate: () => "2026-11",
+  saveState: () => { saveCount++; },
+  renderAll: () => { renderCount++; },
+  currentMonth: "2026-11",
   appState: {
     config: {
       payMode: "hourly",
@@ -32,7 +48,7 @@ const sandbox = {
 };
 
 vm.runInNewContext(
-  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\nthis.calcRecord = calcRecord;`,
+  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("handleQuickPunch")}\nthis.calcRecord = calcRecord; this.handleQuickPunch = handleQuickPunch;`,
   sandbox
 );
 
@@ -125,4 +141,67 @@ test("monthly overtime uses monthly salary converted to the configured hourly ra
   near(result.regPay, 0, "monthly regular record pay");
   near(result.otWeekdayPay, 2 * hourlyRate * 1.5, "monthly overtime pay");
   sandbox.appState.config.payMode = "hourly";
+});
+
+
+function resetPunchHarness(records) {
+  snapshotCount = 0;
+  saveCount = 0;
+  renderCount = 0;
+  toastMessages = [];
+  sandbox.appState.records = records;
+}
+
+test("clocking out without an open shift does not invent a 09:00 start time", () => {
+  resetPunchHarness([]);
+  sandbox.handleQuickPunch("out");
+  assert.equal(sandbox.appState.records.length, 0);
+  assert.equal(snapshotCount, 0);
+  assert.equal(saveCount, 0);
+  assert.match(toastMessages[0], /未生成虚构的上班时间/);
+});
+
+test("repeated clock-in preserves the original real start time", () => {
+  const record = {
+    id: "existing",
+    date: "2026-11-19",
+    startTime: "09:07",
+    endTime: "",
+    type: "workday",
+    note: "一键打卡"
+  };
+  resetPunchHarness([record]);
+  sandbox.handleQuickPunch("in");
+  assert.equal(record.startTime, "09:07");
+  assert.equal(sandbox.appState.records.length, 1);
+  assert.equal(snapshotCount, 0);
+  assert.equal(saveCount, 0);
+  assert.match(toastMessages[0], /原始打卡时间已保留/);
+});
+
+test("clock-in records the current actual time", () => {
+  resetPunchHarness([]);
+  sandbox.handleQuickPunch("in");
+  assert.equal(sandbox.appState.records.length, 1);
+  assert.equal(sandbox.appState.records[0].startTime, "18:00");
+  assert.equal(sandbox.appState.records[0].endTime, "");
+  assert.equal(saveCount, 1);
+  assert.equal(renderCount, 1);
+});
+
+test("clock-out closes the active shift using the current actual time", () => {
+  const record = {
+    id: "active",
+    date: "2026-11-19",
+    startTime: "09:00",
+    endTime: "",
+    type: "workday",
+    note: "一键打卡"
+  };
+  resetPunchHarness([record]);
+  sandbox.handleQuickPunch("out");
+  assert.equal(record.endTime, "18:00");
+  assert.equal(saveCount, 1);
+  assert.equal(renderCount, 1);
+  assert.match(toastMessages[0], /下班打卡成功/);
 });
