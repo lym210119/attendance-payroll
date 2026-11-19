@@ -50,7 +50,7 @@ const sandbox = {
 };
 
 vm.runInNewContext(
-  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("handleQuickPunch")}\n${extractFunction("escapeHtml")}\n${extractFunction("normalizeConfig")}\n${extractFunction("isValidDateString")}\n${extractFunction("isValidRecordCollection")}\nthis.calcRecord = calcRecord; this.handleQuickPunch = handleQuickPunch; this.escapeHtml = escapeHtml; this.normalizeConfig = normalizeConfig; this.isValidDateString = isValidDateString; this.isValidRecordCollection = isValidRecordCollection;`,
+  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("handleQuickPunch")}\n${extractFunction("escapeHtml")}\n${extractFunction("normalizeConfig")}\n${extractFunction("isValidDateString")}\n${extractFunction("isValidRecordCollection")}\n${extractFunction("getCycleMonthForDate")}\n${extractFunction("getCycleDateRange")}\nthis.calcRecord = calcRecord; this.handleQuickPunch = handleQuickPunch; this.escapeHtml = escapeHtml; this.normalizeConfig = normalizeConfig; this.isValidDateString = isValidDateString; this.isValidRecordCollection = isValidRecordCollection; this.getCycleMonthForDate = getCycleMonthForDate; this.getCycleDateRange = getCycleDateRange;`,
   sandbox
 );
 
@@ -251,4 +251,35 @@ test("saved and restored records must contain real calendar dates and safe field
   assert.equal(sandbox.isValidRecordCollection([null]), false);
   assert.equal(sandbox.isValidRecordCollection([{ date: "2026-02-30" }]), false);
   assert.equal(sandbox.isValidRecordCollection([{ date: "2026-11-19", note: {} }]), false);
+});
+
+test("custom payroll cycle starts and ends on the configured day", () => {
+  assert.equal(sandbox.getCycleMonthForDate("2026-11-19", 20), "2026-11");
+  assert.equal(sandbox.getCycleMonthForDate("2026-11-20", 20), "2026-12");
+  assert.equal(sandbox.getCycleMonthForDate("2026-12-20", 20), "2027-01");
+  const range = sandbox.getCycleDateRange("2026-12", 20);
+  assert.equal(range.startStr, "2026-11-20");
+  assert.equal(range.endStr, "2026-12-19");
+});
+
+test("an overnight clock-out keeps the cycle containing the shift start date", () => {
+  const record = {
+    id: "overnight",
+    date: "2026-11-19",
+    startTime: "20:00",
+    endTime: "",
+    type: "workday",
+    note: "night shift"
+  };
+  resetPunchHarness([record]);
+  sandbox.getCycleMonthForDate = date => date === "2026-11-19" ? "2026-11" : "2026-12";
+  sandbox.handleQuickPunch("out");
+  assert.equal(record.endTime, "18:00");
+  assert.equal(sandbox.currentMonth, "2026-11");
+  sandbox.getCycleMonthForDate = () => "2026-11";
+});
+
+test("attendance imports do not invent a 09:00 start when only an end time exists", () => {
+  assert.match(html, /startTime: isLeave \? '' : \(startStr \|\| ''\)/);
+  assert.doesNotMatch(html, /startTime: isLeave \? '' : \(startStr \|\| '09:00'\)/);
 });
