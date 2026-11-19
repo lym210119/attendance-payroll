@@ -1317,7 +1317,7 @@
                 return { complete: false, isCrossDay: false, isLeave: false, netHours: 0, regHours: 0, otHours: 0, regPay: 0, otWeekdayPay: 0, otWeekendPay: 0, otHolidayPay: 0, totalPay: 0 };
             }
 
-            const validTime = value => typeof value === 'string' && /^([01]\\d|2[0-3]):[0-5]\\d$/.test(value);
+            const validTime = value => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
             if (!validTime(rec.startTime) || !validTime(rec.endTime)) {
                 return { complete: false, invalid: true, invalidReason: '时间格式无效', isCrossDay: false, isLeave: false, netHours: 0, regHours: 0, otHours: 0, regPay: 0, otWeekdayPay: 0, otWeekendPay: 0, otHolidayPay: 0, totalPay: 0 };
             }
