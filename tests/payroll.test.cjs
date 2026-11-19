@@ -50,7 +50,7 @@ const sandbox = {
 };
 
 vm.runInNewContext(
-  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("handleQuickPunch")}\n${extractFunction("escapeHtml")}\n${extractFunction("normalizeConfig")}\nthis.calcRecord = calcRecord; this.handleQuickPunch = handleQuickPunch; this.escapeHtml = escapeHtml; this.normalizeConfig = normalizeConfig;`,
+  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("handleQuickPunch")}\n${extractFunction("escapeHtml")}\n${extractFunction("normalizeConfig")}\n${extractFunction("isValidDateString")}\n${extractFunction("isValidRecordCollection")}\nthis.calcRecord = calcRecord; this.handleQuickPunch = handleQuickPunch; this.escapeHtml = escapeHtml; this.normalizeConfig = normalizeConfig; this.isValidDateString = isValidDateString; this.isValidRecordCollection = isValidRecordCollection;`,
   sandbox
 );
 
@@ -239,4 +239,16 @@ test("imported configuration accepts valid values and rejects invalid payroll ru
   assert.equal(normalized.cycleStartDay, 1);
   assert.equal(normalized.strictFullAttend, false);
   assert.equal(normalized.empName, "Test employee");
+});
+
+test("saved and restored records must contain real calendar dates and safe field types", () => {
+  assert.equal(sandbox.isValidDateString("2024-02-29"), true);
+  assert.equal(sandbox.isValidDateString("2026-02-29"), false);
+  assert.equal(sandbox.isValidDateString("2026-13-01"), false);
+  assert.equal(sandbox.isValidRecordCollection([
+    { id: "a", date: "2026-11-19", startTime: "09:00", endTime: "", type: "workday", note: "" }
+  ]), true);
+  assert.equal(sandbox.isValidRecordCollection([null]), false);
+  assert.equal(sandbox.isValidRecordCollection([{ date: "2026-02-30" }]), false);
+  assert.equal(sandbox.isValidRecordCollection([{ date: "2026-11-19", note: {} }]), false);
 });
