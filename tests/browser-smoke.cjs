@@ -29,12 +29,18 @@ async function stubExternalAssets(page) {
   try {
     const context = await browser.newContext();
     const page = await context.newPage();
+    const pageErrors = [];
+    page.on("pageerror", error => pageErrors.push(error.message));
+    page.on("console", message => {
+      if (message.type() === "error") pageErrors.push(message.text());
+    });
     await stubExternalAssets(page);
     await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
-    await page.waitForFunction(() => {
-      const clock = document.getElementById("liveClockDisplay");
-      return clock && clock.textContent.trim() !== "00:00:00";
-    });
+    try {
+      await page.waitForFunction(() => document.getElementById("globalMonthInput")?.value, { timeout: 8000 });
+    } catch (error) {
+      throw new Error(`App initialization did not complete. Browser errors: ${pageErrors.join(" | ")}`);
+    }
 
     assert.match(await page.title(), /牛马打卡/);
     assert.ok(await page.locator("#globalMonthInput").inputValue());
@@ -84,7 +90,7 @@ async function stubExternalAssets(page) {
       localStorage.setItem(key, "{broken-json");
     }, STORAGE_KEY);
     await protectedPage.goto(BASE_URL, { waitUntil: "domcontentloaded" });
-    await protectedPage.waitForFunction(() => document.getElementById("liveClockDisplay")?.textContent.trim() !== "00:00:00");
+    await protectedPage.waitForFunction(() => document.getElementById("globalMonthInput")?.value, { timeout: 8000 });
     const before = await protectedPage.evaluate(key => localStorage.getItem(key), STORAGE_KEY);
     await protectedPage.locator("button").filter({ hasText: "上班打卡" }).first().click();
     const after = await protectedPage.evaluate(key => localStorage.getItem(key), STORAGE_KEY);
