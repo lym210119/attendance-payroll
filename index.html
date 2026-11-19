@@ -984,8 +984,7 @@
             populateCycleStartSelect();
 
             const today = getLocalTodayStr();
-            const affectedDate = action === 'out' && activeRec ? activeRec.date : today;
-            currentMonth = getCycleMonthForDate(affectedDate, appState.config.cycleStartDay);
+            currentMonth = getCycleMonthForDate(today, appState.config.cycleStartDay);
             document.getElementById('globalMonthInput').value = currentMonth;
 
             syncRuleInputs();
@@ -1499,7 +1498,8 @@
                 showToast(`下班打卡成功 (${nowTime})！本班次落袋 ¥${m.totalPay.toFixed(2)}`, 'success', true);
             }
 
-            currentMonth = getCycleMonthForDate(today, appState.config.cycleStartDay);
+            const affectedDate = action === 'out' && activeRec ? activeRec.date : today;
+            currentMonth = getCycleMonthForDate(affectedDate, appState.config.cycleStartDay);
             document.getElementById('globalMonthInput').value = currentMonth;
             saveState();
             renderAll();
