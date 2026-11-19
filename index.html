@@ -2344,7 +2344,7 @@
                 }
                 saveSnapshotForUndo();
                 if (parsed.config) {
-                    appState.config = { ...appState.config, ...parsed.config };
+                    appState.config = normalizeConfig(parsed.config, appState.config);
                     syncRuleInputs();
                 }
                 appState.records = parsed.records;
