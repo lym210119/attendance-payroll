@@ -1951,7 +1951,7 @@
                 : `月薪固定计入基本工资 ¥${c.monthlySalary}；加班参考时薪 ¥${rate.toFixed(2)}/h (按21.75天折算)`;
             document.getElementById('slipAttendDays').textContent = `${attendDays} 天`;
             document.getElementById('slipHoursSplit').textContent = `${regHours.toFixed(1)}h 正常 / ${otHours.toFixed(1)}h 加班`;
-            document.getElementById('slipRegPay').textContent = `¥${displayedRegPay.toFixed(2)}`;
+            document.getElementById('slipRegPay').textContent = `¥${regPay.toFixed(2)}`;
             document.getElementById('slipOtWeekday').textContent = `+¥${otWeekdayPay.toFixed(2)}`;
             document.getElementById('slipOtSpecial').textContent = `+¥${(otWeekendPay + otHolidayPay).toFixed(2)}`;
             document.getElementById('slipBonusLabel').textContent = fullAttendVoided ? '全勤奖 (因请假/缺卡取消)' : '全勤奖 / 固定补贴';
