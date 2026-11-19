@@ -1615,6 +1615,42 @@
             };
         }
 
+        /**
+         * 固定班次边界计薪试算：仅生成对照结果，不替换现有工资金额。
+         * 班内净工时扣除固定休息 90 分钟；班后延时作为候选加班计入。
+         */
+        function calcBoundaryPayroll(rec, options = {}) {
+            const boundary = calcShiftBoundary(rec, { breakMinutes: 90, standardHours: 8 });
+            const empty = {
+                complete: false, isLeave: false, netHours: 0, regHours: 0, otHours: 0,
+                regPay: 0, otWeekdayPay: 0, otWeekendPay: 0, otHolidayPay: 0,
+                totalPay: 0, boundary, reason: boundary.reason || '计薪边界无法计算'
+            };
+            if (!boundary.complete || !boundary.applicable) return empty;
+            const rate = getEffectiveHourlyRate();
+            const paidHours = boundary.estimatedNetHours + boundary.postShiftOvertimeCandidateHours;
+            const standardHours = 8;
+            let regHours = 0, otHours = 0, regPay = 0, otWeekdayPay = 0, otWeekendPay = 0, otHolidayPay = 0;
+            if (rec.type === 'weekend') {
+                otHours = paidHours;
+                otWeekendPay = otHours * rate * appState.config.weekendMult;
+            } else if (rec.type === 'holiday') {
+                otHours = paidHours;
+                otHolidayPay = otHours * rate * appState.config.holidayMult;
+            } else {
+                regHours = Math.min(standardHours, paidHours);
+                otHours = Math.max(0, paidHours - standardHours);
+                regPay = regHours * rate;
+                otWeekdayPay = otHours * rate * appState.config.weekdayMult;
+            }
+            return {
+                complete: true, isLeave: false, netHours: paidHours, regHours, otHours,
+                regPay, otWeekdayPay, otWeekendPay, otHolidayPay,
+                totalPay: regPay + otWeekdayPay + otWeekendPay + otHolidayPay,
+                boundary, reason: ''
+            };
+        }
+
         function calcRecord(rec) {
             const c = appState.config;
             const rate = getEffectiveHourlyRate();
