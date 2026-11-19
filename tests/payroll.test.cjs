@@ -51,7 +51,7 @@ const sandbox = {
 };
 
 vm.runInNewContext(
-  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("calcShiftBoundary")}\n${extractFunction("handleQuickPunch")}\n${extractFunction("escapeHtml")}\n${extractFunction("normalizeConfig")}\n${extractFunction("isValidDateString")}\n${extractFunction("isValidRecordCollection")}\n${extractFunction("getCycleMonthForDate")}\n${extractFunction("getCycleDateRange")}\n${extractFunction("blockIfStorageProtected")}\nthis.calcRecord = calcRecord; this.calcShiftBoundary = calcShiftBoundary; this.handleQuickPunch = handleQuickPunch; this.escapeHtml = escapeHtml; this.normalizeConfig = normalizeConfig; this.isValidDateString = isValidDateString; this.isValidRecordCollection = isValidRecordCollection; this.getCycleMonthForDate = getCycleMonthForDate; this.getCycleDateRange = getCycleDateRange; this.blockIfStorageProtected = blockIfStorageProtected;`,
+  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("calcShiftBoundary")}\n${extractFunction("calcBoundaryPayroll")}\n${extractFunction("handleQuickPunch")}\n${extractFunction("escapeHtml")}\n${extractFunction("normalizeConfig")}\n${extractFunction("isValidDateString")}\n${extractFunction("isValidRecordCollection")}\n${extractFunction("getCycleMonthForDate")}\n${extractFunction("getCycleDateRange")}\n${extractFunction("blockIfStorageProtected")}\nthis.calcRecord = calcRecord; this.calcShiftBoundary = calcShiftBoundary; this.calcBoundaryPayroll = calcBoundaryPayroll; this.handleQuickPunch = handleQuickPunch; this.escapeHtml = escapeHtml; this.normalizeConfig = normalizeConfig; this.isValidDateString = isValidDateString; this.isValidRecordCollection = isValidRecordCollection; this.getCycleMonthForDate = getCycleMonthForDate; this.getCycleDateRange = getCycleDateRange; this.blockIfStorageProtected = blockIfStorageProtected;`,
   sandbox
 );
 
@@ -355,4 +355,43 @@ test("shift boundary analysis rejects invalid times and excludes leave records",
   assert.equal(invalid.complete, false);
   const leave = sandbox.calcShiftBoundary({ date: "2026-11-19", type: "paid_leave" });
   assert.equal(leave.applicable, false);
+});
+
+test("boundary payroll dual calculation uses fixed 90-minute break and 8 regular hours", () => {
+  const record = { date: "2026-11-19", type: "workday", startTime: "08:00", endTime: "20:00" };
+  const result = sandbox.calcBoundaryPayroll(record);
+  assert.equal(result.complete, true);
+  near(result.netHours, 10.5, "fixed-boundary paid hours");
+  near(result.regHours, 8, "boundary regular hours");
+  near(result.otHours, 2.5, "boundary overtime hours");
+  near(result.totalPay, 411.25, "boundary estimated pay");
+  near(calc(record).totalPay, 437.5, "legacy pay must remain unchanged");
+});
+
+test("boundary payroll excludes early punch time from paid hours", () => {
+  const result = sandbox.calcBoundaryPayroll({ date: "2026-11-19", type: "workday", startTime: "07:30", endTime: "20:00" });
+  near(result.netHours, 10.5, "early punch excluded");
+  near(result.totalPay, 411.25, "early punch cannot increase estimate");
+});
+
+test("boundary payroll reduces paid hours for late arrival and early leave", () => {
+  const result = sandbox.calcBoundaryPayroll({ date: "2026-11-19", type: "workday", startTime: "08:30", endTime: "19:00" });
+  near(result.netHours, 9, "paid hours after lateness and early leave");
+  near(result.regHours, 8, "regular hours");
+  near(result.otHours, 1, "overtime hours");
+  near(result.totalPay, 332.5, "estimated pay");
+});
+
+test("boundary payroll counts post-shift extension as overtime candidate", () => {
+  const result = sandbox.calcBoundaryPayroll({ date: "2026-11-19", type: "workday", startTime: "19:30", endTime: "08:30" });
+  near(result.netHours, 11, "boundary plus post-shift paid hours");
+  near(result.otHours, 3, "total overtime hours");
+  near(result.totalPay, 437.5, "estimated pay");
+});
+
+test("boundary payroll retains weekend and holiday multipliers", () => {
+  const weekend = sandbox.calcBoundaryPayroll({ date: "2026-11-21", type: "weekend", startTime: "08:00", endTime: "20:00" });
+  near(weekend.totalPay, 735, "weekend multiplier");
+  const holiday = sandbox.calcBoundaryPayroll({ date: "2026-11-20", type: "holiday", startTime: "08:00", endTime: "20:00" });
+  near(holiday.totalPay, 1102.5, "holiday multiplier");
 });

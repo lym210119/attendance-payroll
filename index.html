@@ -1615,6 +1615,42 @@
             };
         }
 
+        /**
+         * 固定班次边界计薪试算：仅生成对照结果，不替换现有工资金额。
+         * 班内净工时扣除固定休息 90 分钟；班后延时作为候选加班计入。
+         */
+        function calcBoundaryPayroll(rec, options = {}) {
+            const boundary = calcShiftBoundary(rec, { breakMinutes: 90, standardHours: 8 });
+            const empty = {
+                complete: false, isLeave: false, netHours: 0, regHours: 0, otHours: 0,
+                regPay: 0, otWeekdayPay: 0, otWeekendPay: 0, otHolidayPay: 0,
+                totalPay: 0, boundary, reason: boundary.reason || '计薪边界无法计算'
+            };
+            if (!boundary.complete || !boundary.applicable) return empty;
+            const rate = getEffectiveHourlyRate();
+            const paidHours = boundary.estimatedNetHours + boundary.postShiftOvertimeCandidateHours;
+            const standardHours = 8;
+            let regHours = 0, otHours = 0, regPay = 0, otWeekdayPay = 0, otWeekendPay = 0, otHolidayPay = 0;
+            if (rec.type === 'weekend') {
+                otHours = paidHours;
+                otWeekendPay = otHours * rate * appState.config.weekendMult;
+            } else if (rec.type === 'holiday') {
+                otHours = paidHours;
+                otHolidayPay = otHours * rate * appState.config.holidayMult;
+            } else {
+                regHours = Math.min(standardHours, paidHours);
+                otHours = Math.max(0, paidHours - standardHours);
+                regPay = regHours * rate;
+                otWeekdayPay = otHours * rate * appState.config.weekdayMult;
+            }
+            return {
+                complete: true, isLeave: false, netHours: paidHours, regHours, otHours,
+                regPay, otWeekdayPay, otWeekendPay, otHolidayPay,
+                totalPay: regPay + otWeekdayPay + otWeekendPay + otHolidayPay,
+                boundary, reason: ''
+            };
+        }
+
         function calcRecord(rec) {
             const c = appState.config;
             const rate = getEffectiveHourlyRate();
@@ -2255,10 +2291,15 @@
                     ? (rec.type === 'paid_leave' ? `折算标准工时 ${m.regHours.toFixed(1)}h` : '缺勤不计薪')
                     : (m.complete ? `净工时 ${m.netHours.toFixed(1)}h` : '<span class="text-amber-600 font-medium">打卡时间不完整或无效，点击修正</span>');
                 const boundary = m.complete && !m.isLeave ? calcShiftBoundary(rec) : null;
+                const boundaryPay = m.complete && !m.isLeave ? calcBoundaryPayroll(rec) : null;
                 const boundaryMeta = boundary && boundary.applicable && boundary.complete
                     ? `班次边界：${boundary.shiftType === 'night' ? '夜班' : '白班'} · 边界内净工时估算 ${boundary.estimatedNetHours.toFixed(1)}h · 班内加班估算 ${boundary.estimatedShiftOvertimeHours.toFixed(1)}h${boundary.earlyArrivalMinutes > 0 ? ` · 提前到岗 ${(boundary.earlyArrivalMinutes / 60).toFixed(1)}h（不计）` : ''}${boundary.lateArrivalMinutes > 0 ? ` · 迟到 ${(boundary.lateArrivalMinutes / 60).toFixed(1)}h` : ''}${boundary.earlyLeaveMinutes > 0 ? ` · 提前离岗 ${(boundary.earlyLeaveMinutes / 60).toFixed(1)}h` : ''}${boundary.postShiftOvertimeCandidateHours > 0 ? ` · 班后加班候选 ${boundary.postShiftOvertimeCandidateHours.toFixed(1)}h` : ''}`
                     : '';
 
+                const boundaryPayMeta = boundaryPay && boundaryPay.complete
+                    ? '新规则试算 ¥' + boundaryPay.totalPay.toFixed(2) + '（旧规则 ¥' + m.totalPay.toFixed(2) + '，差额 ' + (boundaryPay.totalPay - m.totalPay >= 0 ? '+' : '') + (boundaryPay.totalPay - m.totalPay).toFixed(2) + '；不影响实际工资）'
+                    : '';
+                const boundaryDisplay = boundaryMeta && boundaryPayMeta ? boundaryMeta + ' · ' + boundaryPayMeta : boundaryMeta;
                 row.innerHTML = `
                     <div class="flex items-center gap-3 min-w-0">
                         <div class="w-11 h-11 rounded-xl bg-slate-100 group-hover:bg-white border border-slate-200/70 flex flex-col items-center justify-center shrink-0 tabular-nums">
@@ -2272,7 +2313,7 @@
                             </div>
                             <div class="text-xs text-slate-400 truncate mt-0.5">
                                 ${subMeta}
-                                ${boundaryMeta ? `<div class="text-[11px] text-indigo-600 mt-1">${boundaryMeta}</div>` : ''}
+                                ${boundaryDisplay ? `<div class="text-[11px] text-indigo-600 mt-1">${boundaryDisplay}</div>` : ''}
                                 ${m.otHours > 0 ? ` · <span class="text-amber-600 font-semibold">加班 +${m.otHours.toFixed(1)}h</span>` : ''}
                                 ${rec.note ? ` · ${escapeHtml(rec.note)}` : ''}
                             </div>
