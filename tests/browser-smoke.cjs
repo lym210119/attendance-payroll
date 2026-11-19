@@ -45,6 +45,39 @@ async function stubExternalAssets(page) {
     assert.match(await page.title(), /牛马打卡/);
     assert.ok(await page.locator("#globalMonthInput").inputValue());
 
+    // Responsive sanity checks for narrow mobile widths. Tailwind is stubbed in this
+    // smoke test, so assert our custom mobile header layout and viewport behavior.
+    for (const width of [320, 360, 375, 390, 414]) {
+      await page.setViewportSize({ width, height: 844 });
+      const responsive = await page.evaluate(() => {
+        const headerInner = document.querySelector("header .max-w-7xl");
+        const meta = document.querySelector('meta[name="viewport"]')?.content || "";
+        return {
+          headerDisplay: getComputedStyle(headerInner).display,
+          headerGridColumns: getComputedStyle(headerInner).gridTemplateColumns,
+          headerScrollWidth: headerInner.scrollWidth,
+          headerClientWidth: headerInner.clientWidth,
+          pageWidth: document.documentElement.scrollWidth,
+          viewportWidth: innerWidth,
+          viewportAllowsZoom: !/user-scalable\\s*=\\s*no|max-scale\\s*=\\s*1(?:\\.0)?/i.test(meta),
+          modalMobileRules: [...document.styleSheets].some(sheet => {
+            try { return [...sheet.cssRules].some(rule => rule.cssText.includes("100dvh")); }
+            catch { return false; }
+          })
+        };
+      });
+      assert.equal(responsive.headerDisplay, "grid", `mobile header grid at ${width}px`);
+      assert.ok(responsive.headerScrollWidth <= responsive.headerClientWidth + 2, `header overflow at ${width}px: ${JSON.stringify(responsive)}`);
+      assert.ok(responsive.pageWidth <= width + 2, `page horizontal overflow at ${width}px: ${JSON.stringify(responsive)}`);
+      assert.ok(responsive.viewportAllowsZoom, "viewport must allow accessibility zoom");
+      assert.ok(responsive.modalMobileRules, "mobile modal viewport-height rules must be present");
+    }
+    await page.setViewportSize({ width: 375, height: 812 });
+    for (const tab of ["records", "payroll", "rules", "punch"]) {
+      await page.evaluate(tabName => switchMobileTab(tabName), tab);
+      assert.ok(await page.locator(`#sec-${tab}`).evaluate(el => !el.classList.contains("hidden")), `mobile tab ${tab} should be active`);
+    }
+
     const clockIn = page.locator("button").filter({ hasText: "上班打卡" }).first();
     const clockOut = page.locator("button").filter({ hasText: "下班打卡" }).first();
 
