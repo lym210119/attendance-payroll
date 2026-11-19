@@ -1432,8 +1432,10 @@
             const raw = prompt('请输入本班次实际休息分钟数（例如 60）。未知时请取消，不要填 0。', current);
             if (raw === null) return;
             const minutes = Number(raw);
-            if (!Number.isFinite(minutes) || minutes < 0 || minutes > 720) {
-                showToast('休息分钟数无效，请输入 0 至 720 之间的数字', 'error');
+            const boundary = getPayrollBoundaryResult(rec);
+            const maxMinutes = boundary && Number.isFinite(boundary.overlapMinutes) ? boundary.overlapMinutes : 720;
+            if (!Number.isFinite(minutes) || minutes < 0 || minutes > maxMinutes) {
+                showToast('休息分钟数不能超过本班次标准边界内的实际出勤时长（' + maxMinutes + ' 分钟）', 'error');
                 return;
             }
             rec.payrollMeta = { ...(rec.payrollMeta || {}), actualBreakMinutes: minutes };
