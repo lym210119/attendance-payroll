@@ -2245,6 +2245,7 @@
         }
 
         async function pullFromCloudSync(manual = false) {
+            if (storageWriteBlocked && !manual) return;
             const roomId = (document.getElementById('cloudRoomIdInput')?.value || appState.config.cloudRoomId || '').trim();
             if (!roomId) {
                 if (manual) showToast('请先填写专属同步房间码', 'error');
@@ -2255,18 +2256,19 @@
                 const safeKey = encodeURIComponent(roomId.replace(/[^a-zA-Z0-9_-]/g, '_'));
                 const res = await fetch(`${CLOUD_SYNC_API}/${safeKey}`, { method: 'GET' });
                 if (res.status === 404) {
-                    if (manual) showToast('云端暂无该房间码数据，已为你自动上传当前数据', 'info');
-                    await pushToCloudSync(false);
+                    if (manual) showToast('云端暂无该房间码数据，无法用云端数据恢复', 'info');
                     return;
                 }
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const remote = await res.json();
                 if (!remote || !isValidRecordCollection(remote.records)) {
-                    if (manual) showToast('云端数据格式为空', 'info');
+                    if (manual) showToast('云端数据格式无效，已停止同步以保护本地记录', 'error');
                     return;
                 }
 
                 if (manual || (remote.updatedAt && remote.updatedAt > (appState.updatedAt || 0))) {
+                    const previousState = JSON.parse(JSON.stringify(appState));
+                    const wasStorageBlocked = storageWriteBlocked;
                     saveSnapshotForUndo();
                     if (remote.config) {
                         const keepAuto = appState.config.cloudAutoSync;
@@ -2276,7 +2278,12 @@
                     appState.records = remote.records;
                     appState.updatedAt = remote.updatedAt || Date.now();
                     appState.config.lastCloudSyncAt = Date.now();
-                    saveState(true);
+                    if (!saveState(true, wasStorageBlocked)) {
+                        appState = previousState;
+                        syncRuleInputs();
+                        showToast('云端数据已读取，但无法写入本机存储；原有本地数据未覆盖', 'error');
+                        return;
+                    }
                     updateCloudSyncUI();
                     renderAll();
                     showToast(`已从云端同步最新数据 (${remote.records.length} 条记录)`, 'success', true);
@@ -2376,16 +2383,22 @@
                 const clean = raw.startsWith('NIUMA_BACKUP:') ? raw.slice('NIUMA_BACKUP:'.length).trim() : raw;
                 const decoded = decodeURIComponent(escape(atob(clean)));
                 const parsed = JSON.parse(decoded);
-                if (!parsed || !Array.isArray(parsed.records)) {
+                if (!parsed || !isValidRecordCollection(parsed.records)) {
                     throw new Error('Invalid format');
                 }
+                const previousState = JSON.parse(JSON.stringify(appState));
                 saveSnapshotForUndo();
                 if (parsed.config) {
                     appState.config = normalizeConfig(parsed.config, appState.config);
                     syncRuleInputs();
                 }
                 appState.records = parsed.records;
-                saveState();
+                if (!saveState(true, true)) {
+                    appState = previousState;
+                    syncRuleInputs();
+                    showToast('恢复失败：无法写入本机存储，原始数据未覆盖', 'error');
+                    return;
+                }
                 closeDataModal();
                 renderAll();
                 showToast(`口令恢复成功！已还原 ${parsed.records.length} 条考勤记录`, 'success', true);
