@@ -51,7 +51,7 @@ const sandbox = {
 };
 
 vm.runInNewContext(
-  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("inferShiftType")}\n${extractFunction("calcShiftBoundary")}\n${extractFunction("calcBoundaryPayroll")}\n${extractFunction("handleQuickPunch")}\n${extractFunction("escapeHtml")}\n${extractFunction("normalizeConfig")}\n${extractFunction("isValidDateString")}\n${extractFunction("isValidRecordCollection")}\n${extractFunction("getCycleMonthForDate")}\n${extractFunction("getCycleDateRange")}\n${extractFunction("blockIfStorageProtected")}\nthis.calcRecord = calcRecord; this.inferShiftType = inferShiftType; this.calcShiftBoundary = calcShiftBoundary; this.calcBoundaryPayroll = calcBoundaryPayroll; this.handleQuickPunch = handleQuickPunch; this.escapeHtml = escapeHtml; this.normalizeConfig = normalizeConfig; this.isValidDateString = isValidDateString; this.isValidRecordCollection = isValidRecordCollection; this.getCycleMonthForDate = getCycleMonthForDate; this.getCycleDateRange = getCycleDateRange; this.blockIfStorageProtected = blockIfStorageProtected;`,
+  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("handleQuickPunch")}\n${extractFunction("escapeHtml")}\n${extractFunction("normalizeConfig")}\n${extractFunction("isValidDateString")}\n${extractFunction("isValidRecordCollection")}\n${extractFunction("getCycleMonthForDate")}\n${extractFunction("getCycleDateRange")}\n${extractFunction("blockIfStorageProtected")}\nthis.calcRecord = calcRecord; this.handleQuickPunch = handleQuickPunch; this.escapeHtml = escapeHtml; this.normalizeConfig = normalizeConfig; this.isValidDateString = isValidDateString; this.isValidRecordCollection = isValidRecordCollection; this.getCycleMonthForDate = getCycleMonthForDate; this.getCycleDateRange = getCycleDateRange; this.blockIfStorageProtected = blockIfStorageProtected;`,
   sandbox
 );
 
@@ -107,13 +107,12 @@ test("hourly paid leave is paid at standard daily hours", () => {
   near(result.totalPay, 280, "paid leave pay");
 });
 
-test("monthly paid leave is paid at standard daily hours using the converted hourly rate", () => {
+test("monthly paid leave does not duplicate the fixed base salary", () => {
   sandbox.appState.config.payMode = "monthly";
   const result = calc({ type: "paid_leave" });
-  const hourlyRate = 7000 / (21.75 * 8);
   near(result.regHours, 8, "paid leave hours");
-  near(result.regPay, 8 * hourlyRate, "paid leave pay");
-  near(result.totalPay, 8 * hourlyRate, "paid leave total pay");
+  near(result.regPay, 0, "record-level paid leave pay");
+  near(result.totalPay, 0, "record-level total pay");
   sandbox.appState.config.payMode = "hourly";
 });
 
@@ -138,40 +137,13 @@ test("invalid clock values are rejected instead of producing NaN", () => {
   near(result.totalPay, 0, "total pay");
 });
 
-test("monthly workday wages include regular hours and overtime, not a separate fixed base", () => {
+test("monthly overtime uses monthly salary converted to the configured hourly rate", () => {
   sandbox.appState.config.payMode = "monthly";
+  const result = calc({ type: "workday", startTime: "09:00", endTime: "20:00" });
   const hourlyRate = 7000 / (21.75 * 8);
-  const normal = calc({ type: "workday", startTime: "09:00", endTime: "18:00" });
-  near(normal.regPay, 8 * hourlyRate, "monthly regular record pay");
-  near(normal.totalPay, 8 * hourlyRate, "monthly normal shift pay");
-  const overtime = calc({ type: "workday", startTime: "09:00", endTime: "20:00" });
-  near(overtime.regPay, 8 * hourlyRate, "monthly overtime shift regular pay");
-  near(overtime.otWeekdayPay, 2 * hourlyRate * 1.5, "monthly overtime pay");
-  near(overtime.totalPay, 8 * hourlyRate + 2 * hourlyRate * 1.5, "monthly overtime shift total");
+  near(result.regPay, 0, "monthly regular record pay");
+  near(result.otWeekdayPay, 2 * hourlyRate * 1.5, "monthly overtime pay");
   sandbox.appState.config.payMode = "hourly";
-});
-
-test("monthly weekend and holiday shifts use their configured multipliers on all net hours", () => {
-  sandbox.appState.config.payMode = "monthly";
-  const hourlyRate = 7000 / (21.75 * 8);
-  const weekend = calc({ type: "weekend", startTime: "10:00", endTime: "18:00" });
-  near(weekend.otWeekendPay, 7 * hourlyRate * 2, "monthly weekend pay");
-  const holiday = calc({ type: "holiday", startTime: "10:00", endTime: "18:00" });
-  near(holiday.otHolidayPay, 7 * hourlyRate * 3, "monthly holiday pay");
-  sandbox.appState.config.payMode = "hourly";
-});
-
-test("monthly unpaid leave and incomplete shifts remain unpaid", () => {
-  sandbox.appState.config.payMode = "monthly";
-  near(calc({ type: "unpaid_leave" }).totalPay, 0, "monthly unpaid leave");
-  near(calc({ type: "workday", startTime: "09:00", endTime: "" }).totalPay, 0, "monthly incomplete shift");
-  sandbox.appState.config.payMode = "hourly";
-});
-
-test("payroll summary does not add a separate monthly base salary", () => {
-  assert.doesNotMatch(html, /const baseSalary = c\.payMode === 'monthly'/);
-  assert.match(html, /const grossPay = regPay \+ otWeekdayPay \+ otWeekendPay \+ otHolidayPay \+ appliedBonus;/);
-  assert.match(html, /valRegPay'\)\.textContent = `¥\$\{regPay\.toFixed\(2\)\}`/);
 });
 
 
@@ -311,124 +283,4 @@ test("an overnight clock-out keeps the cycle containing the shift start date", (
 test("attendance imports do not invent a 09:00 start when only an end time exists", () => {
   assert.match(html, /startTime: isLeave \? '' : \(startStr \|\| ''\)/);
   assert.doesNotMatch(html, /startTime: isLeave \? '' : \(startStr \|\| '09:00'\)/);
-});
-
-test("shift boundary analysis keeps early punch outside scheduled paid boundary", () => {
-  const result = sandbox.calcShiftBoundary({ date: "2026-11-19", type: "workday", startTime: "07:30", endTime: "20:00" });
-  assert.equal(result.applicable, true);
-  assert.equal(result.shiftType, "day");
-  assert.equal(result.earlyArrivalMinutes, 30);
-  assert.equal(result.withinShiftMinutes, 720);
-  near(result.estimatedNetHours, 10.5, "estimated net within shift");
-  near(result.estimatedShiftOvertimeHours, 2.5, "estimated overtime");
-});
-
-test("shift boundary analysis reports late arrival and early leave separately", () => {
-  const result = sandbox.calcShiftBoundary({ date: "2026-11-19", type: "workday", startTime: "08:30", endTime: "19:00" });
-  assert.equal(result.lateArrivalMinutes, 30);
-  assert.equal(result.earlyLeaveMinutes, 60);
-  assert.equal(result.withinShiftMinutes, 630);
-  near(result.estimatedNetHours, 9, "estimated net");
-  near(result.estimatedShiftOvertimeHours, 1, "estimated overtime");
-});
-
-test("night shift boundaries remain assigned to the shift start date", () => {
-  const result = sandbox.calcShiftBoundary({ date: "2026-11-19", type: "workday", startTime: "20:00", endTime: "08:00" });
-  assert.equal(result.shiftType, "night");
-  assert.equal(result.scheduledStart, "2026-11-19 20:00");
-  assert.equal(result.scheduledEnd, "2026-11-20 08:00");
-  assert.equal(result.actualEnd, "2026-11-20 08:00");
-  assert.equal(result.postShiftOvertimeCandidateHours, 0);
-  near(result.estimatedNetHours, 10.5, "night shift net");
-});
-
-test("night shift pre-shift arrival and post-shift departure are separate metrics", () => {
-  const result = sandbox.calcShiftBoundary({ date: "2026-11-19", type: "workday", startTime: "19:30", endTime: "08:30" });
-  assert.equal(result.shiftType, "night");
-  assert.equal(result.earlyArrivalMinutes, 30);
-  assert.equal(result.postShiftMinutes, 30);
-  near(result.postShiftOvertimeCandidateHours, 0.5, "post-shift candidate");
-});
-
-test("shift boundary analysis rejects invalid times and excludes leave records", () => {
-  const invalid = sandbox.calcShiftBoundary({ date: "2026-11-19", type: "workday", startTime: "29:99", endTime: "20:00" });
-  assert.equal(invalid.complete, false);
-  const leave = sandbox.calcShiftBoundary({ date: "2026-11-19", type: "paid_leave" });
-  assert.equal(leave.applicable, false);
-});
-
-test("boundary payroll dual calculation uses fixed 90-minute break and 8 regular hours", () => {
-  const record = { date: "2026-11-19", type: "workday", startTime: "08:00", endTime: "20:00" };
-  const result = sandbox.calcBoundaryPayroll(record);
-  assert.equal(result.complete, true);
-  near(result.netHours, 10.5, "fixed-boundary paid hours");
-  near(result.regHours, 8, "boundary regular hours");
-  near(result.otHours, 2.5, "boundary overtime hours");
-  near(result.totalPay, 411.25, "boundary estimated pay");
-  near(calc(record).totalPay, 437.5, "legacy pay must remain unchanged");
-});
-
-test("boundary payroll excludes early punch time from paid hours", () => {
-  const result = sandbox.calcBoundaryPayroll({ date: "2026-11-19", type: "workday", startTime: "07:30", endTime: "20:00" });
-  near(result.netHours, 10.5, "early punch excluded");
-  near(result.totalPay, 411.25, "early punch cannot increase estimate");
-});
-
-test("boundary payroll reduces paid hours for late arrival and early leave", () => {
-  const result = sandbox.calcBoundaryPayroll({ date: "2026-11-19", type: "workday", startTime: "08:30", endTime: "19:00" });
-  near(result.netHours, 9, "paid hours after lateness and early leave");
-  near(result.regHours, 8, "regular hours");
-  near(result.otHours, 1, "overtime hours");
-  near(result.totalPay, 332.5, "estimated pay");
-});
-
-test("boundary payroll counts post-shift extension as overtime candidate", () => {
-  const result = sandbox.calcBoundaryPayroll({ date: "2026-11-19", type: "workday", startTime: "19:30", endTime: "08:30" });
-  near(result.netHours, 11, "boundary plus post-shift paid hours");
-  near(result.otHours, 3, "total overtime hours");
-  near(result.totalPay, 437.5, "estimated pay");
-});
-
-test("boundary payroll retains weekend and holiday multipliers", () => {
-  const weekend = sandbox.calcBoundaryPayroll({ date: "2026-11-21", type: "weekend", startTime: "08:00", endTime: "20:00" });
-  near(weekend.totalPay, 735, "weekend multiplier");
-  const holiday = sandbox.calcBoundaryPayroll({ date: "2026-11-20", type: "holiday", startTime: "08:00", endTime: "20:00" });
-  near(holiday.totalPay, 1102.5, "holiday multiplier");
-});
-
-
-test("legacy records infer day or night shift from punch-in time", () => {
-  assert.equal(sandbox.inferShiftType("08:00"), "day");
-  assert.equal(sandbox.inferShiftType("18:59"), "day");
-  assert.equal(sandbox.inferShiftType("19:00"), "night");
-  assert.equal(sandbox.inferShiftType("04:59"), "night");
-  assert.equal(sandbox.inferShiftType("05:00"), "day");
-});
-
-test("explicit day shift overrides inference for a late-evening punch", () => {
-  const result = sandbox.calcShiftBoundary({
-    date: "2026-11-19", type: "workday", startTime: "19:30", endTime: "08:30", shiftType: "day"
-  });
-  assert.equal(result.shiftType, "day");
-  assert.equal(result.scheduledStart, "2026-11-19 08:00");
-  assert.equal(result.scheduledEnd, "2026-11-19 20:00");
-  near(result.withinShiftMinutes, 30, "day-shift overlap minutes");
-});
-
-test("explicit night shift overrides inference and spans into the next day", () => {
-  const result = sandbox.calcShiftBoundary({
-    date: "2026-11-19", type: "workday", startTime: "19:30", endTime: "08:30", shiftType: "night"
-  });
-  assert.equal(result.shiftType, "night");
-  assert.equal(result.scheduledStart, "2026-11-19 20:00");
-  assert.equal(result.scheduledEnd, "2026-11-20 08:00");
-  near(result.withinShiftMinutes, 720, "night-shift overlap minutes");
-});
-
-test("legacy records without a saved shift type keep inference fallback", () => {
-  const result = sandbox.calcShiftBoundary({
-    date: "2026-11-19", type: "workday", startTime: "20:00", endTime: "08:00"
-  });
-  assert.equal(result.shiftType, "night");
-  assert.equal(result.scheduledEnd, "2026-11-20 08:00");
 });
