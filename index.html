@@ -1380,7 +1380,6 @@
 
             if (rec.type === 'paid_leave') {
                 const regHours = c.stdHours;
-                // 月薪模式的基本工资由周期汇总统一计算，避免按请假记录重复计薪。
                 const regPay = regHours * rate;
                 return {
                     complete: true, isCrossDay: false, isLeave: true,
