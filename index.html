@@ -1558,7 +1558,7 @@
          * 休息时段未记录具体起止，因此此处只扣固定休息估算值，不作为最终工资依据。
          */
         function inferShiftType(startTime) {
-            if (typeof startTime !== 'string' || !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(startTime)) return 'day';
+            if (typeof startTime !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) return 'day';
             const [hour, minute] = startTime.split(':').map(Number);
             const clock = hour * 60 + minute;
             return clock >= 19 * 60 || clock < 5 * 60 ? 'night' : 'day';
