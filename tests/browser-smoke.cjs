@@ -46,7 +46,7 @@ async function stubExternalAssets(page) {
     let state = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
     assert.equal(state.records.length, 1);
     const originalStart = state.records[0].startTime;
-    assert.match(originalStart, /^([01]\\d|2[0-3]):[0-5]\\d$/);
+    assert.match(originalStart, /^([01]\d|2[0-3]):[0-5]\d$/);
 
     await clockIn.click();
     state = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
@@ -56,7 +56,7 @@ async function stubExternalAssets(page) {
     await clockOut.click();
     state = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
     assert.ok(state.records[0].endTime);
-    assert.match(state.records[0].endTime, /^([01]\\d|2[0-3]):[0-5]\\d$/);
+    assert.match(state.records[0].endTime, /^([01]\d|2[0-3]):[0-5]\d$/);
 
     await page.reload({ waitUntil: "domcontentloaded" });
     state = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
@@ -92,7 +92,7 @@ async function stubExternalAssets(page) {
 
     await protectedContext.close();
     await context.close();
-    process.stdout.write("Browser smoke tests passed: startup, real punches, duplicate protection, persistence, XSS escaping, and corrupt-storage protection.\\n");
+    process.stdout.write("Browser smoke tests passed: startup, real punches, duplicate protection, persistence, XSS escaping, and corrupt-storage protection.\n");
   } finally {
     await browser.close();
   }
