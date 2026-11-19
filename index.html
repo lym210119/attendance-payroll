@@ -623,10 +623,10 @@
                     </div>
                     <div class="flex items-center gap-4 pt-0.5">
                         <label class="inline-flex items-center gap-1.5 cursor-pointer text-slate-700">
-                            <input type="radio" name="sameDayAction" value="overwrite" checked class="text-brand-600"> 覆盖原记录
+                            <input type="radio" name="sameDayAction" value="overwrite" class="text-brand-600"> 覆盖原记录
                         </label>
                         <label class="inline-flex items-center gap-1.5 cursor-pointer text-brand-700 font-semibold">
-                            <input type="radio" name="sameDayAction" value="append" class="text-brand-600"> 作为同日新班次追加
+                            <input type="radio" name="sameDayAction" value="append" checked class="text-brand-600"> 作为同日新班次追加（默认）
                         </label>
                     </div>
                 </div>
@@ -1536,7 +1536,7 @@
                 const otSec = Math.abs(remainSec);
                 const oh = Math.floor(otSec / 3600);
                 const om = Math.floor((otSec % 3600) / 60);
-                countdownLabel.innerHTML = `<i data-lucide="flame" class="w-3 h-3 text-amber-500"></i><span class="text-amber-700 font-semibold">已进入 ${c.weekdayMult}x 加班回血模式 (+${oh}h${String(om).padStart(2, '0')}m)</span>`;
+                countdownLabel.innerHTML = `<i data-lucide="flame" class="w-3 h-3 text-amber-500"></i><span class="text-amber-700 font-semibold">已进入 ${escapeHtml(c.weekdayMult)}x 加班回血模式 (+${oh}h${String(om).padStart(2, '0')}m)</span>`;
             }
         }
 
@@ -1733,7 +1733,7 @@
             } else {
                 const existIdx = appState.records.findIndex(r => r.date === date);
                 const sameDayActionEl = document.querySelector('input[name="sameDayAction"]:checked');
-                const sameDayAction = sameDayActionEl ? sameDayActionEl.value : 'overwrite';
+                const sameDayAction = sameDayActionEl ? sameDayActionEl.value : 'append';
 
                 if (existIdx !== -1 && sameDayAction === 'overwrite') {
                     appState.records[existIdx] = { ...appState.records[existIdx], type, startTime, endTime, note };
