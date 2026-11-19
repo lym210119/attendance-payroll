@@ -2257,7 +2257,8 @@
                 const safeKey = encodeURIComponent(roomId.replace(/[^a-zA-Z0-9_-]/g, '_'));
                 const res = await fetch(`${CLOUD_SYNC_API}/${safeKey}`, { method: 'GET' });
                 if (res.status === 404) {
-                    if (manual) showToast('云端暂无该房间码数据，无法用云端数据恢复', 'info');
+                    if (manual) showToast('云端暂无该房间码数据，已尝试上传当前本地数据', 'info');
+                    await pushToCloudSync(false);
                     return;
                 }
                 if (!res.ok) throw new Error('HTTP ' + res.status);
