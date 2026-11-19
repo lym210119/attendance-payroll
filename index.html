@@ -623,10 +623,10 @@
                     </div>
                     <div class="flex items-center gap-4 pt-0.5">
                         <label class="inline-flex items-center gap-1.5 cursor-pointer text-slate-700">
-                            <input type="radio" name="sameDayAction" value="overwrite" class="text-brand-600"> 覆盖原记录
+                            <input type="radio" name="sameDayAction" value="overwrite" checked class="text-brand-600"> 覆盖原记录
                         </label>
                         <label class="inline-flex items-center gap-1.5 cursor-pointer text-brand-700 font-semibold">
-                            <input type="radio" name="sameDayAction" value="append" checked class="text-brand-600"> 作为同日新班次追加（默认）
+                            <input type="radio" name="sameDayAction" value="append" class="text-brand-600"> 作为同日新班次追加
                         </label>
                     </div>
                 </div>
@@ -972,10 +972,7 @@
         let listFilter = 'all';      // 'all' | 'ot' | 'leave' | 'incomplete'
         let undoSnapshot = null;     // 用于“撤销”操作的快照
         let pendingImportRows = [];  // 待确认导入的解析记录
-        let pendingImportConfig = null; // JSON 配置暂存，确认导入前不修改当前设置
-        let importRequestId = 0; // 忽略已取消或过期的异步文件读取结果
         let cloudSyncTimer = null;
-        let storageWriteBlocked = false; // 检测到本地数据损坏时禁止自动覆盖原始数据
 
         // =========================================================================
         // 2. 初始化与实时时钟
@@ -1000,8 +997,7 @@
             // 若已开启自动云同步，启动时自动从云端拉取最新状态
             if (appState.config.cloudAutoSync && appState.config.cloudRoomId) {
                 pullFromCloudSync(false);
-            }
-        });
+            }        });
 
         function checkIosInstallBanner() {
             const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
@@ -1054,78 +1050,6 @@
         function getLocalTimeStr() {
             const d = new Date();
             return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-        }
-
-        function escapeHtml(value) {
-            return String(value ?? '').replace(/[&<>"']/g, ch => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-            }[ch]));
-        }
-
-        function isValidDateString(value) {
-            if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-            const [year, month, day] = value.split('-').map(Number);
-            const date = new Date(year, month - 1, day);
-            return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
-        }
-
-        function isValidRecordCollection(records) {
-            if (!Array.isArray(records)) return false;
-            return records.every(record => {
-                if (!record || typeof record !== 'object' || Array.isArray(record)) return false;
-                if (!isValidDateString(record.date)) return false;
-                return ['startTime', 'endTime', 'type', 'note'].every(key =>
-                    record[key] === undefined || record[key] === null || typeof record[key] === 'string'
-                ) && (record.id === undefined || record.id === null ||
-                    typeof record.id === 'string' || typeof record.id === 'number');
-            });
-        }
-
-        function normalizeConfig(raw, base = appState.config) {
-            const next = { ...base };
-            if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return next;
-
-            if (raw.payMode === 'hourly' || raw.payMode === 'monthly') {
-                next.payMode = raw.payMode;
-            }
-
-            const numericRules = {
-                hourlyRate: [0, 10000000],
-                monthlySalary: [0, 100000000],
-                stdHours: [0.5, 24],
-                lunchHours: [0, 12],
-                weekdayMult: [1, 10],
-                weekendMult: [1, 10],
-                holidayMult: [1, 10],
-                bonus: [0, 100000000],
-                deduction: [0, 100000000]
-            };
-            Object.entries(numericRules).forEach(([key, [min, max]]) => {
-                if (!Object.prototype.hasOwnProperty.call(raw, key)) return;
-                const value = Number(raw[key]);
-                if (Number.isFinite(value) && value >= min && value <= max) {
-                    next[key] = value;
-                }
-            });
-
-            if (Number.isInteger(Number(raw.cycleStartDay)) &&
-                Number(raw.cycleStartDay) >= 1 && Number(raw.cycleStartDay) <= 28) {
-                next.cycleStartDay = Number(raw.cycleStartDay);
-            }
-            if (typeof raw.strictFullAttend === 'boolean') next.strictFullAttend = raw.strictFullAttend;
-            if (typeof raw.cloudAutoSync === 'boolean') next.cloudAutoSync = raw.cloudAutoSync;
-
-            ['cloudRoomId', 'empName', 'empDept'].forEach(key => {
-                if (typeof raw[key] === 'string') next[key] = raw[key].slice(0, key === 'cloudRoomId' ? 128 : 100);
-            });
-            ['lastBackupAt', 'lastCloudSyncAt'].forEach(key => {
-                if (raw[key] === null) next[key] = null;
-                else {
-                    const value = Number(raw[key]);
-                    if (Number.isFinite(value) && value > 0) next[key] = value;
-                }
-            });
-            return next;
         }
 
         function startClock() {
@@ -1199,48 +1123,28 @@
         function loadState() {
             try {
                 const raw = localStorage.getItem(STORAGE_KEY);
-                if (!raw) return;
-                const parsed = JSON.parse(raw);
-                if (!parsed || typeof parsed !== 'object' || !isValidRecordCollection(parsed.records)) {
-                    throw new Error('本地数据结构不完整');
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (parsed.config) appState.config = { ...appState.config, ...parsed.config };
+                    if (Array.isArray(parsed.records)) appState.records = parsed.records;
+                    if (parsed.updatedAt) appState.updatedAt = parsed.updatedAt;
                 }
-                if (parsed.config && typeof parsed.config === 'object' && !Array.isArray(parsed.config)) {
-                    appState.config = normalizeConfig(parsed.config, appState.config);
-                }
-                appState.records = parsed.records;
-                if (parsed.updatedAt) appState.updatedAt = parsed.updatedAt;
             } catch (e) {
-                // 不清空、不覆盖原始 localStorage 内容；等待用户导出/恢复后再允许写入。
-                storageWriteBlocked = true;
-                console.error('本地数据无法安全读取，已阻止覆盖原始数据', e);
-                setTimeout(() => showToast('检测到本地数据异常，已暂停自动保存以保护原始数据。请使用完整备份口令恢复，或在数据中心手动从云端拉取；请勿清理浏览器数据。', 'error'), 0);
+                console.error('加载本地数据失败', e);
             }
         }
 
-        function saveState(skipCloudPush = false, allowRecovery = false) {
-            if (storageWriteBlocked && !allowRecovery) {
-                showToast('本地数据保护已启用：当前不会覆盖原始存储数据', 'error');
-                return false;
-            }
+        function saveState(skipCloudPush = false) {
             try {
                 appState.updatedAt = Date.now();
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
-                if (allowRecovery) storageWriteBlocked = false;
                 if (!skipCloudPush && appState.config.cloudAutoSync && appState.config.cloudRoomId) {
                     clearTimeout(cloudSyncTimer);
                     cloudSyncTimer = setTimeout(() => pushToCloudSync(false), 1200);
                 }
-                return true;
             } catch (e) {
-                showToast('浏览器本地存储空间不足，本次更改未能可靠保存，请先导出 JSON 备份并释放空间', 'error');
-                return false;
+                showToast('浏览器本地存储空间不足，请导出 JSON 备份', 'error');
             }
-        }
-
-        function blockIfStorageProtected() {
-            if (!storageWriteBlocked) return false;
-            showToast('本地数据保护已启用：请先使用完整备份恢复，或从云端拉取有效数据', 'error');
-            return true;
         }
 
         function saveSnapshotForUndo() {
@@ -1248,7 +1152,6 @@
         }
 
         function triggerUndo() {
-            if (blockIfStorageProtected()) return;
             if (!undoSnapshot) return;
             appState.records = undoSnapshot;
             undoSnapshot = null;
@@ -1297,7 +1200,6 @@
         // 4. 薪资规则与工时核心算法
         // =========================================================================
         function setPayMode(mode) {
-            if (blockIfStorageProtected()) return;
             appState.config.payMode = mode;
             syncRuleInputs();
             saveState();
@@ -1334,7 +1236,6 @@
         }
 
         function handleRuleInput() {
-            if (blockIfStorageProtected()) return;
             const c = appState.config;
             const prevStartDay = c.cycleStartDay || 1;
             c.hourlyRate = Math.max(0, parseFloat(document.getElementById('inHourlyRate').value) || 0);
@@ -1358,7 +1259,6 @@
         }
 
         function saveEmpMeta() {
-            if (blockIfStorageProtected()) return;
             appState.config.empName = document.getElementById('slipEmpName').value;
             appState.config.empDept = document.getElementById('slipEmpDept').value;
             saveState();
@@ -1380,8 +1280,7 @@
 
             if (rec.type === 'paid_leave') {
                 const regHours = c.stdHours;
-                // 月薪模式的基本工资由周期汇总统一计算，避免按请假记录重复计薪。
-                const regPay = c.payMode === 'monthly' ? 0 : regHours * rate;
+                const regPay = regHours * rate;
                 return {
                     complete: true, isCrossDay: false, isLeave: true,
                     netHours: regHours, regHours, otHours: 0,
@@ -1401,10 +1300,6 @@
                 return { complete: false, isCrossDay: false, isLeave: false, netHours: 0, regHours: 0, otHours: 0, regPay: 0, otWeekdayPay: 0, otWeekendPay: 0, otHolidayPay: 0, totalPay: 0 };
             }
 
-            const validTime = value => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
-            if (!validTime(rec.startTime) || !validTime(rec.endTime)) {
-                return { complete: false, invalid: true, invalidReason: '时间格式无效', isCrossDay: false, isLeave: false, netHours: 0, regHours: 0, otHours: 0, regPay: 0, otWeekdayPay: 0, otWeekendPay: 0, otHolidayPay: 0, totalPay: 0 };
-            }
             const [sh, sm] = rec.startTime.split(':').map(Number);
             const [eh, em] = rec.endTime.split(':').map(Number);
             let sMin = sh * 60 + sm;
@@ -1430,7 +1325,7 @@
             } else {
                 regHours = Math.min(netHours, c.stdHours);
                 otHours = Math.max(0, netHours - c.stdHours);
-                regPay = c.payMode === 'monthly' ? 0 : regHours * rate;
+                regPay = regHours * rate;
                 otWeekdayPay = otHours * rate * c.weekdayMult;
             }
 
@@ -1454,53 +1349,62 @@
         // 5. 今日一键打卡与实时“窝囊费”秒级计数器 + 下班倒计时
         // =========================================================================
         function handleQuickPunch(action) {
-            if (blockIfStorageProtected()) return;
             const today = getLocalTodayStr();
             const nowTime = getLocalTimeStr();
-            const todayRecs = appState.records.filter(r => r.date === today);
-            const yesterday = getYesterdayStr();
-            // 只把未下班的记录视为进行中班次，避免重复打卡覆盖真实时间。
-            const activeRec = appState.records
-                .filter(r => r.date >= yesterday && r.date <= today && r.startTime && !r.endTime)
-                .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`))
-                .pop();
-
-            if (action === 'in' && activeRec) {
-                const started = activeRec.date === today
-                    ? `今日已于 ${activeRec.startTime} 打过上班卡`
-                    : `${activeRec.date} 的班次仍未下班`;
-                showToast(`${started}，原始打卡时间已保留；如需修正请使用补卡/手动录入`, 'error');
-                return;
-            }
-
-            if (action === 'out' && !activeRec) {
-                showToast('没有找到进行中的上班记录，未生成虚构的上班时间；请先上班打卡，或使用补卡/手动录入', 'error');
-                return;
-            }
-
             saveSnapshotForUndo();
 
+            const todayRecs = appState.records.filter(r => r.date === today);
+            const activeRec = todayRecs.find(r => r.startTime && !r.endTime) || todayRecs[todayRecs.length - 1];
+
             if (action === 'in') {
-                const detected = detectDayType(today);
-                appState.records.push({
-                    id: 'id_' + Date.now(),
-                    date: today,
-                    startTime: nowTime,
-                    endTime: '',
-                    type: detected.type,
-                    note: todayRecs.length ? `同日第${todayRecs.length + 1}班次` : (detected.holidayName ? `${detected.holidayName} 打卡` : '一键打卡')
-                });
-                showToast(todayRecs.length
-                    ? `已开启今日第 ${todayRecs.length + 1} 班次 (${nowTime})`
-                    : `上班打卡成功 (${nowTime})，开始累计今日窝囊费`, 'success', true);
+                if (activeRec && !activeRec.endTime) {
+                    activeRec.startTime = nowTime;
+                    showToast(`已更新今日上班打卡为 ${nowTime}`, 'success', true);
+                } else if (activeRec && activeRec.endTime) {
+                    const detected = detectDayType(today);
+                    appState.records.push({
+                        id: 'id_' + Date.now(),
+                        date: today,
+                        startTime: nowTime,
+                        endTime: '',
+                        type: detected.type,
+                        note: `同日第${todayRecs.length + 1}班次`
+                    });
+                    showToast(`已开启今日第 ${todayRecs.length + 1} 班次 (${nowTime})`, 'success', true);
+                } else {
+                    const detected = detectDayType(today);
+                    appState.records.push({
+                        id: 'id_' + Date.now(),
+                        date: today,
+                        startTime: nowTime,
+                        endTime: '',
+                        type: detected.type,
+                        note: detected.holidayName ? `${detected.holidayName} 打卡` : '一键打卡'
+                    });
+                    showToast(`上班打卡成功 (${nowTime})，开始累计今日窝囊费`, 'success', true);
+                }
             } else {
-                activeRec.endTime = nowTime;
-                const m = calcRecord(activeRec);
-                showToast(`下班打卡成功 (${nowTime})！本班次落袋 ¥${m.totalPay.toFixed(2)}`, 'success', true);
+                if (activeRec) {
+                    activeRec.endTime = nowTime;
+                    const m = calcRecord(activeRec);
+                    showToast(`下班打卡成功 (${nowTime})！本班次落袋 ¥${m.totalPay.toFixed(2)}`, 'success', true);
+                } else {
+                    const detected = detectDayType(today);
+                    const newRec = {
+                        id: 'id_' + Date.now(),
+                        date: today,
+                        startTime: '09:00',
+                        endTime: nowTime,
+                        type: detected.type,
+                        note: '下班打卡(自动补齐09:00)'
+                    };
+                    appState.records.push(newRec);
+                    const m = calcRecord(newRec);
+                    showToast(`下班打卡成功 (${nowTime})，今日落袋 ¥${m.totalPay.toFixed(2)}`, 'info', true);
+                }
             }
 
-            const affectedDate = action === 'out' && activeRec ? activeRec.date : today;
-            currentMonth = getCycleMonthForDate(affectedDate, appState.config.cycleStartDay);
+            currentMonth = getCycleMonthForDate(today, appState.config.cycleStartDay);
             document.getElementById('globalMonthInput').value = currentMonth;
             saveState();
             renderAll();
@@ -1509,19 +1413,15 @@
         function updateLiveEarningsCounter(now = new Date()) {
             const today = getLocalTodayStr();
             const todayRecs = appState.records.filter(r => r.date === today);
-            const yesterday = getYesterdayStr();
-            const activeRec = appState.records
-                .filter(r => r.date >= yesterday && r.date <= today && r.startTime && !r.endTime)
-                .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`))
-                .pop();
             const box = document.getElementById('liveEarningsBox');
             if (!box) return;
 
-            if (todayRecs.length === 0 && !activeRec) {
+            if (todayRecs.length === 0) {
                 box.classList.add('hidden');
                 return;
             }
 
+            const activeRec = todayRecs.find(r => r.startTime && !r.endTime);
             const completedRecs = todayRecs.filter(r => r.endTime || r.type === 'paid_leave' || r.type === 'unpaid_leave');
 
             if (!activeRec && completedRecs.length === 0) {
@@ -1563,11 +1463,9 @@
             }
 
             const [sh, sm] = activeRec.startTime.split(':').map(Number);
-            const [sy, smo, sd] = activeRec.date.split('-').map(Number);
-            const shiftStart = new Date(sy, smo - 1, sd, sh, sm, 0, 0);
-            const elapsedSec = Math.max(0, Math.floor((now.getTime() - shiftStart.getTime()) / 1000));
             const startSec = sh * 3600 + sm * 60;
             const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+            const elapsedSec = Math.max(0, nowSec - startSec);
             const rawH = elapsedSec / 3600;
             const actualBreak = rawH > 5 ? Math.min(c.lunchHours, Math.max(0, rawH - 0.5)) : 0;
             const activeNetHours = Math.max(0, rawH - actualBreak);
@@ -1600,13 +1498,12 @@
 
             countdownRow.classList.remove('hidden');
             const targetTotalSec = Math.round((c.stdHours + c.lunchHours) * 3600);
-            const targetOffAt = new Date(shiftStart.getTime() + targetTotalSec * 1000);
-            const offH = targetOffAt.getHours();
-            const offM = targetOffAt.getMinutes();
-            const offDateLabel = targetOffAt.toDateString() !== shiftStart.toDateString() ? '次日 ' : '';
-            expectedOffTag.textContent = `达标时间 ${offDateLabel}${String(offH).padStart(2, '0')}:${String(offM).padStart(2, '0')}`;
+            const targetOffSec = startSec + targetTotalSec;
+            const offH = Math.floor(targetOffSec / 3600) % 24;
+            const offM = Math.floor((targetOffSec % 3600) / 60);
+            expectedOffTag.textContent = `达标时间 ${String(offH).padStart(2, '0')}:${String(offM).padStart(2, '0')}`;
 
-            const remainSec = Math.floor((targetOffAt.getTime() - now.getTime()) / 1000);
+            const remainSec = targetOffSec - nowSec;
             if (remainSec > 0) {
                 const rh = Math.floor(remainSec / 3600);
                 const rm = Math.floor((remainSec % 3600) / 60);
@@ -1616,18 +1513,14 @@
                 const otSec = Math.abs(remainSec);
                 const oh = Math.floor(otSec / 3600);
                 const om = Math.floor((otSec % 3600) / 60);
-                countdownLabel.innerHTML = `<i data-lucide="flame" class="w-3 h-3 text-amber-500"></i><span class="text-amber-700 font-semibold">已进入 ${escapeHtml(c.weekdayMult)}x 加班回血模式 (+${oh}h${String(om).padStart(2, '0')}m)</span>`;
+                countdownLabel.innerHTML = `<i data-lucide="flame" class="w-3 h-3 text-amber-500"></i><span class="text-amber-700 font-semibold">已进入 ${c.weekdayMult}x 加班回血模式 (+${oh}h${String(om).padStart(2, '0')}m)</span>`;
             }
         }
 
         function renderTodayCard() {
             const today = getLocalTodayStr();
             const todayRecs = appState.records.filter(r => r.date === today);
-            const overnightActive = appState.records
-                .filter(r => r.date === getYesterdayStr() && r.startTime && !r.endTime)
-                .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`))
-                .pop();
-            const rec = overnightActive || todayRecs.find(r => r.startTime && !r.endTime) || todayRecs[todayRecs.length - 1];
+            const rec = todayRecs.find(r => r.startTime && !r.endTime) || todayRecs[todayRecs.length - 1];
             const pill = document.getElementById('todayStatusPill');
             const inEl = document.getElementById('todayInDisplay');
             const outEl = document.getElementById('todayOutDisplay');
@@ -1644,15 +1537,13 @@
                 pill.className = 'text-xs font-semibold px-3 py-1.5 rounded-full bg-purple-50 text-purple-700 shrink-0';
                 inEl.textContent = '休假';
                 outEl.textContent = '全天';
-                timelineEl.innerHTML = `<span>今日已标记为${rec.type === 'paid_leave' ? '带薪年假/调休' : '事假/病假'}</span><button type="button" id="todayEditRecordBtn" class="text-xs underline text-slate-500 cursor-pointer">修改</button>`;
-                timelineEl.querySelector('#todayEditRecordBtn').addEventListener('click', () => openRecordEditor(rec.id));
+                timelineEl.innerHTML = `<span>今日已标记为${rec.type === 'paid_leave' ? '带薪年假/调休' : '事假/病假'}</span><button onclick="openRecordEditor('${rec.id}')" class="text-xs underline text-slate-500 cursor-pointer">修改</button>`;
             } else if (rec.startTime && !rec.endTime) {
-                pill.textContent = rec.date < today ? '夜班进行中' : (todayRecs.length > 1 ? `第${todayRecs.length}班次中` : '工作中');
+                pill.textContent = todayRecs.length > 1 ? `第${todayRecs.length}班次中` : '工作中';
                 pill.className = 'text-xs font-semibold px-3 py-1.5 rounded-full bg-brand-50 text-brand-700 shrink-0';
                 inEl.textContent = rec.startTime;
                 outEl.textContent = '待下班';
-                timelineEl.innerHTML = `<span class="text-brand-600 font-medium">${rec.date < today ? `${escapeHtml(rec.date)} ` : ''}已于 ${escapeHtml(rec.startTime)} 上班，进行中...</span><button type="button" id="todayEditRecordBtn" class="text-xs underline text-slate-500 cursor-pointer">修改时间</button>`;
-                timelineEl.querySelector('#todayEditRecordBtn').addEventListener('click', () => openRecordEditor(rec.id));
+                timelineEl.innerHTML = `<span class="text-brand-600 font-medium">已于 ${rec.startTime} 上班，进行中...</span><button onclick="openRecordEditor('${rec.id}')" class="text-xs underline text-slate-500 cursor-pointer">修改时间</button>`;
             } else {
                 let totalH = 0, totalOt = 0, totalPay = 0;
                 todayRecs.forEach(r => {
@@ -1664,8 +1555,8 @@
                 const lastM = calcRecord(rec);
                 pill.textContent = `已下班 · ${totalH.toFixed(1)}h`;
                 pill.className = 'text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 shrink-0';
-                outEl.innerHTML = `${escapeHtml(rec.endTime || '--:--')}${lastM.isCrossDay ? '<span class="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 align-middle">次日</span>' : ''}`;
-                inEl.textContent = rec.startTime || '--:--';
+                inEl.textContent = rec.startTime;
+                outEl.innerHTML = `${rec.endTime}${lastM.isCrossDay ? '<span class="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 align-middle">次日</span>' : ''}`;
                 timelineEl.innerHTML = `<span>净工时 <strong>${totalH.toFixed(1)}h</strong> ${totalOt > 0 ? `(含加班 ${totalOt.toFixed(1)}h)` : ''}</span><span class="font-bold text-emerald-600 tabular-nums">今日 +¥${totalPay.toFixed(2)}</span>`;
             }
 
@@ -1794,7 +1685,6 @@
 
         function saveEditorRecord(e) {
             e.preventDefault();
-            if (blockIfStorageProtected()) return;
             saveSnapshotForUndo();
 
             const id = document.getElementById('editRecId').value;
@@ -1814,7 +1704,7 @@
             } else {
                 const existIdx = appState.records.findIndex(r => r.date === date);
                 const sameDayActionEl = document.querySelector('input[name="sameDayAction"]:checked');
-                const sameDayAction = sameDayActionEl ? sameDayActionEl.value : 'append';
+                const sameDayAction = sameDayActionEl ? sameDayActionEl.value : 'overwrite';
 
                 if (existIdx !== -1 && sameDayAction === 'overwrite') {
                     appState.records[existIdx] = { ...appState.records[existIdx], type, startTime, endTime, note };
@@ -1836,7 +1726,6 @@
         }
 
         function deleteFromEditor() {
-            if (blockIfStorageProtected()) return;
             const id = document.getElementById('editRecId').value;
             if (!id) return;
             saveSnapshotForUndo();
@@ -1923,10 +1812,7 @@
             const fullAttendVoided = c.strictFullAttend && hasUnpaidOrIncomplete && c.bonus > 0;
             const appliedBonus = attendDays > 0 && !fullAttendVoided ? c.bonus : 0;
             const appliedDeduct = attendDays > 0 ? c.deduction : 0;
-            // 月薪模式：基本工资按整个计薪周期固定计入，不依赖是否存在打卡记录。
-            const baseSalary = c.payMode === 'monthly' ? Math.max(0, Number(c.monthlySalary) || 0) : 0;
-            const displayedRegPay = baseSalary + regPay;
-            const grossPay = baseSalary + regPay + otWeekdayPay + otWeekendPay + otHolidayPay + appliedBonus;
+            const grossPay = regPay + otWeekdayPay + otWeekendPay + otHolidayPay + appliedBonus;
             const netPay = Math.max(0, grossPay - appliedDeduct);
 
             document.getElementById('valNetPay').textContent = netPay.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1938,7 +1824,7 @@
             document.getElementById('valOtWeekendH').textContent = otWeekendH.toFixed(1);
             document.getElementById('valOtHolidayH').textContent = otHolidayH.toFixed(1);
 
-            document.getElementById('valRegPay').textContent = `¥${displayedRegPay.toFixed(2)}`;
+            document.getElementById('valRegPay').textContent = `¥${regPay.toFixed(2)}`;
             document.getElementById('valOtWeekdayPay').textContent = `+¥${otWeekdayPay.toFixed(2)}`;
             document.getElementById('valOtSpecialPay').textContent = `+¥${(otWeekendPay + otHolidayPay).toFixed(2)}`;
             document.getElementById('valBonusLabel').textContent = fullAttendVoided ? '全勤补贴(缺勤取消)' : '全勤/固定补贴';
@@ -1952,10 +1838,10 @@
             document.getElementById('slipViewDept').textContent = c.empDept || '综合业务部';
             document.getElementById('slipRuleText').textContent = c.payMode === 'hourly'
                 ? `按小时计薪 (¥${c.hourlyRate.toFixed(2)}/h)`
-                : `月薪固定计入基本工资 ¥${c.monthlySalary}；加班参考时薪 ¥${rate.toFixed(2)}/h (按21.75天折算)`;
+                : `按月薪折算 (¥${c.monthlySalary} ÷ 21.75天 ÷ ${c.stdHours}h = ¥${rate.toFixed(2)}/h)`;
             document.getElementById('slipAttendDays').textContent = `${attendDays} 天`;
             document.getElementById('slipHoursSplit').textContent = `${regHours.toFixed(1)}h 正常 / ${otHours.toFixed(1)}h 加班`;
-            document.getElementById('slipRegPay').textContent = `¥${displayedRegPay.toFixed(2)}`;
+            document.getElementById('slipRegPay').textContent = `¥${regPay.toFixed(2)}`;
             document.getElementById('slipOtWeekday').textContent = `+¥${otWeekdayPay.toFixed(2)}`;
             document.getElementById('slipOtSpecial').textContent = `+¥${(otWeekendPay + otHolidayPay).toFixed(2)}`;
             document.getElementById('slipBonusLabel').textContent = fullAttendVoided ? '全勤奖 (因请假/缺卡取消)' : '全勤奖 / 固定补贴';
@@ -2002,8 +1888,7 @@
 
             filtered.forEach(rec => {
                 const m = calcRecord(rec);
-                const safeDate = escapeHtml(String(rec.date || ''));
-                const dow = new Date(String(rec.date || '') + 'T00:00:00').getDay();
+                const dow = new Date(rec.date + 'T00:00:00').getDay();
                 const tInfo = typeMap[rec.type] || typeMap.workday;
 
                 const row = document.createElement('div');
@@ -2012,17 +1897,17 @@
 
                 const timeHeadline = m.isLeave
                     ? (rec.type === 'paid_leave' ? '带薪年假 / 调休' : '事假 / 病假')
-                    : `${escapeHtml(rec.startTime || '--:--')} → ${escapeHtml(rec.endTime || '未下班')}${m.isCrossDay ? ' <span class="text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-700">次日</span>' : ''}`;
+                    : `${rec.startTime || '--:--'} → ${rec.endTime || '未下班'}${m.isCrossDay ? ' <span class="text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-700">次日</span>' : ''}`;
 
                 const subMeta = m.isLeave
                     ? (rec.type === 'paid_leave' ? `折算标准工时 ${m.regHours.toFixed(1)}h` : '缺勤不计薪')
-                    : (m.complete ? `净工时 ${m.netHours.toFixed(1)}h` : '<span class="text-amber-600 font-medium">打卡时间不完整或无效，点击修正</span>');
+                    : (m.complete ? `净工时 ${m.netHours.toFixed(1)}h` : '<span class="text-amber-600 font-medium">缺少下班时间，点击补卡</span>');
 
                 row.innerHTML = `
                     <div class="flex items-center gap-3 min-w-0">
                         <div class="w-11 h-11 rounded-xl bg-slate-100 group-hover:bg-white border border-slate-200/70 flex flex-col items-center justify-center shrink-0 tabular-nums">
-                            <span class="text-sm font-extrabold text-slate-800 leading-none">${escapeHtml(safeDate.slice(8, 10))}</span>
-                            <span class="text-[10px] text-slate-400 mt-1">${escapeHtml(safeDate.slice(5, 7))}月·${weekStrs[dow] || ''}</span>
+                            <span class="text-sm font-extrabold text-slate-800 leading-none">${rec.date.slice(8, 10)}</span>
+                            <span class="text-[10px] text-slate-400 mt-1">${rec.date.slice(5, 7)}月·${weekStrs[dow] || ''}</span>
                         </div>
                         <div class="min-w-0">
                             <div class="flex items-center gap-1.5 flex-wrap">
@@ -2032,7 +1917,7 @@
                             <div class="text-xs text-slate-400 truncate mt-0.5">
                                 ${subMeta}
                                 ${m.otHours > 0 ? ` · <span class="text-amber-600 font-semibold">加班 +${m.otHours.toFixed(1)}h</span>` : ''}
-                                ${rec.note ? ` · ${escapeHtml(rec.note)}` : ''}
+                                ${rec.note ? ` · ${rec.note}` : ''}
                             </div>
                         </div>
                     </div>
@@ -2111,8 +1996,7 @@
                             <div class="mt-auto w-full">
                                 <div class="text-[10px] font-bold text-amber-700 leading-tight">${sumH.toFixed(1)}h${dayRecs.length > 1 ? `·${dayRecs.length}班` : ''}</div>
                                 <div class="text-[9px] font-semibold text-emerald-600 truncate">¥${Math.round(sumPay)}</div>
-                            </div>`;
-                    } else {
+                            </div>`;                    } else {
                         bgCls = 'bg-emerald-50/70 hover:bg-emerald-100/70 border-emerald-200';
                         statusHtml = `
                             <div class="mt-auto w-full">
@@ -2135,7 +2019,6 @@
         // 8. 清空当前周期数据 & 多设备云同步引擎
         // =========================================================================
         function askClearMonth() {
-            if (blockIfStorageProtected()) return;
             const range = getCycleDateRange(currentMonth, appState.config.cycleStartDay || 1);
             const count = appState.records.filter(r => r.date >= range.startStr && r.date <= range.endStr).length;
             if (count === 0) {
@@ -2199,7 +2082,6 @@
         }
 
         function saveCloudSyncSettings() {
-            if (blockIfStorageProtected()) return;
             const roomId = document.getElementById('cloudRoomIdInput').value.trim();
             const autoSync = document.getElementById('cloudAutoSyncCheck').checked;
             if (!roomId) {
@@ -2218,7 +2100,6 @@
         }
 
         async function pushToCloudSync(manual = false) {
-            if (blockIfStorageProtected()) return;
             const roomId = (document.getElementById('cloudRoomIdInput')?.value || appState.config.cloudRoomId || '').trim();
             if (!roomId) {
                 if (manual) showToast('请先填写专属同步房间码', 'error');
@@ -2247,7 +2128,6 @@
         }
 
         async function pullFromCloudSync(manual = false) {
-            if (storageWriteBlocked && !manual) return;
             const roomId = (document.getElementById('cloudRoomIdInput')?.value || appState.config.cloudRoomId || '').trim();
             if (!roomId) {
                 if (manual) showToast('请先填写专属同步房间码', 'error');
@@ -2258,35 +2138,28 @@
                 const safeKey = encodeURIComponent(roomId.replace(/[^a-zA-Z0-9_-]/g, '_'));
                 const res = await fetch(`${CLOUD_SYNC_API}/${safeKey}`, { method: 'GET' });
                 if (res.status === 404) {
-                    if (manual) showToast('云端暂无该房间码数据，已尝试上传当前本地数据', 'info');
+                    if (manual) showToast('云端暂无该房间码数据，已为你自动上传当前数据', 'info');
                     await pushToCloudSync(false);
                     return;
                 }
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const remote = await res.json();
-                if (!remote || !isValidRecordCollection(remote.records)) {
-                    if (manual) showToast('云端数据格式无效，已停止同步以保护本地记录', 'error');
+                if (!remote || !Array.isArray(remote.records)) {
+                    if (manual) showToast('云端数据格式为空', 'info');
                     return;
                 }
 
                 if (manual || (remote.updatedAt && remote.updatedAt > (appState.updatedAt || 0))) {
-                    const previousState = JSON.parse(JSON.stringify(appState));
-                    const wasStorageBlocked = storageWriteBlocked;
                     saveSnapshotForUndo();
                     if (remote.config) {
                         const keepAuto = appState.config.cloudAutoSync;
-                        appState.config = { ...normalizeConfig(remote.config, appState.config), cloudRoomId: roomId, cloudAutoSync: keepAuto };
+                        appState.config = { ...appState.config, ...remote.config, cloudRoomId: roomId, cloudAutoSync: keepAuto };
                         syncRuleInputs();
                     }
                     appState.records = remote.records;
                     appState.updatedAt = remote.updatedAt || Date.now();
                     appState.config.lastCloudSyncAt = Date.now();
-                    if (!saveState(true, wasStorageBlocked)) {
-                        appState = previousState;
-                        syncRuleInputs();
-                        showToast('云端数据已读取，但无法写入本机存储；原有本地数据未覆盖', 'error');
-                        return;
-                    }
+                    saveState(true);
                     updateCloudSyncUI();
                     renderAll();
                     showToast(`已从云端同步最新数据 (${remote.records.length} 条记录)`, 'success', true);
@@ -2306,7 +2179,6 @@
             document.getElementById('dataCenterModal').classList.remove('hidden');
             document.getElementById('importPreviewBox').classList.add('hidden');
             pendingImportRows = [];
-            pendingImportConfig = null;
             updateBackupStatusBanner();
             updateCloudSyncUI();
             const targetTab = ['sync', 'file', 'paste', 'token', 'export'].includes(tab) ? tab : 'file';
@@ -2314,11 +2186,6 @@
         }
 
         function closeDataModal() {
-            // 关闭数据中心即取消尚未确认的导入，并使未完成的 FileReader 结果失效。
-            importRequestId++;
-            pendingImportRows = [];
-            pendingImportConfig = null;
-            document.getElementById('importPreviewBox').classList.add('hidden');
             document.getElementById('dataCenterModal').classList.add('hidden');
         }
 
@@ -2358,7 +2225,6 @@
         }
 
         function generateBackupToken() {
-            if (blockIfStorageProtected()) return;
             try {
                 const payload = JSON.stringify(appState);
                 const encoded = btoa(unescape(encodeURIComponent(payload)));
@@ -2387,22 +2253,16 @@
                 const clean = raw.startsWith('NIUMA_BACKUP:') ? raw.slice('NIUMA_BACKUP:'.length).trim() : raw;
                 const decoded = decodeURIComponent(escape(atob(clean)));
                 const parsed = JSON.parse(decoded);
-                if (!parsed || !isValidRecordCollection(parsed.records)) {
+                if (!parsed || !Array.isArray(parsed.records)) {
                     throw new Error('Invalid format');
                 }
-                const previousState = JSON.parse(JSON.stringify(appState));
                 saveSnapshotForUndo();
                 if (parsed.config) {
-                    appState.config = normalizeConfig(parsed.config, appState.config);
+                    appState.config = { ...appState.config, ...parsed.config };
                     syncRuleInputs();
                 }
                 appState.records = parsed.records;
-                if (!saveState(true, true)) {
-                    appState = previousState;
-                    syncRuleInputs();
-                    showToast('恢复失败：无法写入本机存储，原始数据未覆盖', 'error');
-                    return;
-                }
+                saveState();
                 closeDataModal();
                 renderAll();
                 showToast(`口令恢复成功！已还原 ${parsed.records.length} 条考勤记录`, 'success', true);
@@ -2439,20 +2299,17 @@
         }
 
         function processUploadedFile(file) {
-            // 每次选择新文件都丢弃上一次尚未确认的预览，并使旧 FileReader 结果失效。
-            const requestId = ++importRequestId;
-            pendingImportRows = [];
-            pendingImportConfig = null;
-            document.getElementById('importPreviewBox').classList.add('hidden');
             const name = file.name.toLowerCase();
             if (name.endsWith('.json')) {
                 const reader = new FileReader();
                 reader.onload = ev => {
-                    if (requestId !== importRequestId) return;
                     try {
                         const obj = JSON.parse(ev.target.result);
                         const list = Array.isArray(obj) ? obj : (obj.records || []);
-                        pendingImportConfig = obj.config && typeof obj.config === 'object' && !Array.isArray(obj.config) ? obj.config : null;
+                        if (obj.config) {
+                            appState.config = { ...appState.config, ...obj.config };
+                            syncRuleInputs();
+                        }
                         normalizeAndPreviewRows(list);
                     } catch (err) {
                         showToast('JSON 备份文件格式解析失败', 'error');
@@ -2462,7 +2319,6 @@
             } else {
                 const reader = new FileReader();
                 reader.onload = ev => {
-                    if (requestId !== importRequestId) return;
                     try {
                         const wb = XLSX.read(ev.target.result, { type: 'array' });
                         const targetSheetName = wb.SheetNames.find(s => s.includes('明细')) || wb.SheetNames[0];
@@ -2507,9 +2363,6 @@
 
                 const dateStr = formatExcelDate(rawDate);
                 if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
-                const dateParts = dateStr.split('-').map(Number);
-                const dateObj = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
-                if (dateObj.getFullYear() !== dateParts[0] || dateObj.getMonth() !== dateParts[1] - 1 || dateObj.getDate() !== dateParts[2]) return;
 
                 let type = 'workday';
                 if (rawType.includes('周末') || rawType === 'weekend') type = 'weekend';
@@ -2528,7 +2381,7 @@
                 parsed.push({
                     id: 'imp_' + Date.now() + Math.random().toString(36).slice(2, 6),
                     date: dateStr,
-                    startTime: isLeave ? '' : (startStr || ''),
+                    startTime: isLeave ? '' : (startStr || '09:00'),
                     endTime: isLeave ? '' : (endStr || ''),
                     type,
                     note
@@ -2548,7 +2401,6 @@
                 paid_leave: '带薪假', unpaid_leave: '请假0薪'
             };
 
-            const escapeHtml = value => String(value ?? '').replace(/[&<>\"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]));
             parsed.slice(0, 30).forEach(r => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -2556,7 +2408,7 @@
                     <td class="py-1.5 px-2 text-slate-600">${r.startTime || '-'}</td>
                     <td class="py-1.5 px-2 text-slate-600">${r.endTime || (r.type.includes('leave') ? '-' : '未下班')}</td>
                     <td class="py-1.5 px-2 text-slate-600">${typeNames[r.type] || '工作日'}</td>
-                    <td class="py-1.5 px-2 text-slate-400 truncate max-w-[120px]">${escapeHtml(r.note)}</td>
+                    <td class="py-1.5 px-2 text-slate-400 truncate max-w-[120px]">${r.note}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -2591,35 +2443,23 @@
         }
 
         function commitParsedImport() {
-            if (blockIfStorageProtected()) return;
             if (pendingImportRows.length === 0) return;
             saveSnapshotForUndo();
 
             const strategy = document.querySelector('input[name="importStrategy"]:checked').value;
-            const importDates = new Set(pendingImportRows.map(r => r.date));
             if (strategy === 'replace') {
-                // 仅替换本次导入涉及的日期，不删除整个计薪周期内的其他记录。
-                appState.records = appState.records.filter(r => !importDates.has(r.date));
+                const targetMonths = new Set(pendingImportRows.map(r => getCycleMonthForDate(r.date, appState.config.cycleStartDay)));
+                appState.records = appState.records.filter(r => !targetMonths.has(getCycleMonthForDate(r.date, appState.config.cycleStartDay)));
             }
 
-            // 合并模式保留同日多班次；仅跳过字段完全相同的记录，避免重复导入产生重复项。
-            let addedCount = 0, skippedCount = 0;
             pendingImportRows.forEach(newRec => {
-                const duplicate = appState.records.some(r =>
-                    r.date === newRec.date && (r.startTime || '') === (newRec.startTime || '') &&
-                    (r.endTime || '') === (newRec.endTime || '') && r.type === newRec.type &&
-                    (r.note || '') === (newRec.note || '')
-                );
-                if (duplicate) { skippedCount++; return; }
-                appState.records.push(newRec);
-                addedCount++;
+                const existIdx = appState.records.findIndex(r => r.date === newRec.date);
+                if (existIdx !== -1) {
+                    appState.records[existIdx] = newRec;
+                } else {
+                    appState.records.push(newRec);
+                }
             });
-
-            if (pendingImportConfig) {
-                appState.config = normalizeConfig(pendingImportConfig, appState.config);
-                syncRuleInputs();
-                pendingImportConfig = null;
-            }
 
             const latestDate = pendingImportRows.map(r => r.date).sort().pop();
             if (latestDate) {
@@ -2629,11 +2469,10 @@
 
             const importedCount = pendingImportRows.length;
             pendingImportRows = [];
-            pendingImportConfig = null;
             closeDataModal();
             saveState();
             renderAll();
-            showToast(`导入完成：新增 ${addedCount} 条${skippedCount ? `，跳过重复 ${skippedCount} 条` : ''}（解析 ${importedCount} 条）`, 'success', true);
+            showToast(`成功导入 ${importedCount} 条考勤记录！`, 'success', true);
         }
 
         function downloadImportTemplate() {
@@ -2727,7 +2566,6 @@
         }
 
         function exportJSONBackup() {
-            if (blockIfStorageProtected()) return;
             appState.config.lastBackupAt = Date.now();
             saveState();
             const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
@@ -2763,9 +2601,9 @@
             toast.innerHTML = `
                 <div class="flex items-center gap-2">
                     <span class="w-2 h-2 rounded-full ${type === 'error' ? 'bg-white' : 'bg-emerald-400'}"></span>
-                    <span>${escapeHtml(message)}</span>
+                    <span>${message}</span>
                 </div>
-                ${allowUndo && undoSnapshot ? '<button onclick="triggerUndo(); this.parentElement.remove();" class="text-xs font-bold text-amber-300 hover:text-amber-200 underline shrink-0 cursor-pointer">撤销</button>' : ''}
+                ${allowUndo && undoSnapshot ? `<button onclick="triggerUndo(); this.parentElement.remove();" class="text-xs font-bold text-amber-300 hover:text-amber-200 underline shrink-0 cursor-pointer">撤销</button>` : ''}
             `;
             container.appendChild(toast);
 
