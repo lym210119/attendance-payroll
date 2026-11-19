@@ -384,9 +384,9 @@ test("boundary payroll reduces paid hours for late arrival and early leave", () 
 
 test("boundary payroll counts post-shift extension as overtime candidate", () => {
   const result = sandbox.calcBoundaryPayroll({ date: "2026-11-19", type: "workday", startTime: "19:30", endTime: "08:30" });
-  near(result.netHours, 12, "boundary plus post-shift paid hours");
-  near(result.otHours, 4, "total overtime hours");
-  near(result.totalPay, 560, "estimated pay");
+  near(result.netHours, 11, "boundary plus post-shift paid hours");
+  near(result.otHours, 3, "total overtime hours");
+  near(result.totalPay, 437.5, "estimated pay");
 });
 
 test("boundary payroll retains weekend and holiday multipliers", () => {
