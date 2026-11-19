@@ -48,7 +48,7 @@ const sandbox = {
 };
 
 vm.runInNewContext(
-  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("handleQuickPunch")}\n${extractFunction("escapeHtml")}\nthis.calcRecord = calcRecord; this.handleQuickPunch = handleQuickPunch; this.escapeHtml = escapeHtml;`,
+  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("handleQuickPunch")}\n${extractFunction("escapeHtml")}\n${extractFunction("normalizeConfig")}\nthis.calcRecord = calcRecord; this.handleQuickPunch = handleQuickPunch; this.escapeHtml = escapeHtml; this.normalizeConfig = normalizeConfig;`,
   sandbox
 );
 
@@ -214,4 +214,27 @@ test("untrusted imported text is escaped before HTML rendering", () => {
 test("manual same-day records default to append instead of overwriting existing attendance", () => {
   assert.match(html, /name="sameDayAction" value="append" checked/);
   assert.match(html, /sameDayActionEl \? sameDayActionEl\.value : 'append'/);
+});
+
+test("imported configuration accepts valid values and rejects invalid payroll rules", () => {
+  const normalized = sandbox.normalizeConfig({
+    payMode: "unexpected",
+    hourlyRate: "not-a-number",
+    monthlySalary: 9000,
+    stdHours: -2,
+    lunchHours: 1.25,
+    weekendMult: 50,
+    cycleStartDay: 31,
+    strictFullAttend: "yes",
+    empName: "Test employee"
+  });
+  assert.equal(normalized.payMode, "hourly");
+  assert.equal(normalized.hourlyRate, 35);
+  assert.equal(normalized.monthlySalary, 9000);
+  assert.equal(normalized.stdHours, 8);
+  assert.equal(normalized.lunchHours, 1.25);
+  assert.equal(normalized.weekendMult, 2);
+  assert.equal(normalized.cycleStartDay, 1);
+  assert.equal(normalized.strictFullAttend, false);
+  assert.equal(normalized.empName, "Test employee");
 });
