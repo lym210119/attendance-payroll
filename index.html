@@ -764,6 +764,15 @@
                     </div>
                 </div>
 
+                <div id="editorShiftRow" class="space-y-1.5">
+                    <label class="block text-xs font-semibold text-slate-600">固定班次（用于新规则试算）</label>
+                    <select id="editRecShiftType" class="w-full px-3 py-2.5 text-sm font-semibold bg-slate-50 border border-slate-200 rounded-xl focus:border-brand-500 focus:bg-white outline-none">
+                        <option value="day">白班 08:00–20:00</option>
+                        <option value="night">夜班 20:00–次日08:00</option>
+                    </select>
+                    <p id="editorShiftHint" class="text-[11px] text-slate-400">旧记录按打卡时间自动推断；可在此手动修正。仅影响新规则试算，不改变当前实际工资。</p>
+                </div>
+
                 <div id="editorTimeRow" class="grid grid-cols-2 gap-3 transition-opacity">
                     <div>
                         <label class="block text-xs font-semibold text-slate-600 mb-1">上班时间</label>
@@ -1548,6 +1557,13 @@
          * 实际打卡保留原值；提前到岗不增加边界内工时，延后离岗单独标记候选加班。
          * 休息时段未记录具体起止，因此此处只扣固定休息估算值，不作为最终工资依据。
          */
+        function inferShiftType(startTime) {
+            if (typeof startTime !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) return 'day';
+            const [hour, minute] = startTime.split(':').map(Number);
+            const clock = hour * 60 + minute;
+            return clock >= 19 * 60 || clock < 5 * 60 ? 'night' : 'day';
+        }
+
         function calcShiftBoundary(rec, options = {}) {
             const breakMinutes = Number.isFinite(options.breakMinutes) ? Math.max(0, options.breakMinutes) : 90;
             const standardHours = Number.isFinite(options.standardHours) ? Math.max(0, options.standardHours) : 8;
@@ -1571,7 +1587,7 @@
             const [eh, em] = rec.endTime.split(':').map(Number);
             const startClock = sh * 60 + sm;
             const endClock = eh * 60 + em;
-            const shiftType = startClock >= 19 * 60 || startClock < 5 * 60 ? 'night' : 'day';
+            const shiftType = rec.shiftType === 'day' || rec.shiftType === 'night' ? rec.shiftType : inferShiftType(rec.startTime);
             const shiftStartClock = shiftType === 'night' ? 20 * 60 : 8 * 60;
             const shiftEndClock = shiftType === 'night' ? 8 * 60 : 20 * 60;
             const [year, month, day] = rec.date.split('-').map(Number);
@@ -1978,6 +1994,9 @@
                 document.getElementById('editRecStart').value = rec.startTime || '09:00';
                 document.getElementById('editRecEnd').value = rec.endTime || '';
                 document.getElementById('editRecNote').value = rec.note || '';
+                const inferredShift = inferShiftType(rec.startTime);
+                document.getElementById('editRecShiftType').value = rec.shiftType === 'night' || rec.shiftType === 'day' ? rec.shiftType : inferredShift;
+                document.getElementById('editorShiftHint').textContent = rec.shiftType ? '已保存手动班次；修改后会更新新规则试算，不改变旧规则实际工资。' : `旧记录暂按${inferredShift === 'night' ? '夜班' : '白班'}推断，尚未手动确认；可在此修正。`;
                 delBtn.classList.remove('hidden');
                 if (sameDayBox) sameDayBox.classList.add('hidden');
                 checkHolidayBanner(rec.date, rec.type);
@@ -1990,6 +2009,8 @@
                 document.getElementById('editRecStart').value = '09:00';
                 document.getElementById('editRecEnd').value = '18:30';
                 document.getElementById('editRecNote').value = '';
+                document.getElementById('editRecShiftType').value = 'day';
+                document.getElementById('editorShiftHint').textContent = '新记录默认白班；如为夜班，请手动选择。班次只影响新规则试算。';
                 delBtn.classList.add('hidden');
                 updateSameDayBoxVisibility(targetDate);
             }
@@ -2080,11 +2101,12 @@
             const startTime = isLeave ? '' : document.getElementById('editRecStart').value;
             const endTime = isLeave ? '' : document.getElementById('editRecEnd').value;
             const note = document.getElementById('editRecNote').value.trim();
+            const shiftType = document.getElementById('editRecShiftType').value === 'night' ? 'night' : 'day';
 
             if (id) {
                 const idx = appState.records.findIndex(r => r.id === id);
                 if (idx !== -1) {
-                    appState.records[idx] = { ...appState.records[idx], date, type, startTime, endTime, note };
+                    appState.records[idx] = { ...appState.records[idx], date, type, startTime, endTime, shiftType, note };
                 }
                 showToast('考勤记录已更新', 'success', true);
             } else {
@@ -2093,12 +2115,12 @@
                 const sameDayAction = sameDayActionEl ? sameDayActionEl.value : 'append';
 
                 if (existIdx !== -1 && sameDayAction === 'overwrite') {
-                    appState.records[existIdx] = { ...appState.records[existIdx], type, startTime, endTime, note };
+                    appState.records[existIdx] = { ...appState.records[existIdx], type, startTime, endTime, shiftType, note };
                     showToast(`已覆盖更新 ${date} 的记录`, 'success', true);
                 } else {
                     appState.records.push({
                         id: 'id_' + Date.now() + Math.random().toString(36).slice(2, 5),
-                        date, type, startTime, endTime, note
+                        date, type, startTime, endTime, shiftType, note
                     });
                     showToast(existIdx !== -1 ? `已追加 ${date} 同日新班次` : `已添加 ${date} 考勤记录`, 'success', true);
                 }
@@ -2293,7 +2315,7 @@
                 const boundary = m.complete && !m.isLeave ? calcShiftBoundary(rec) : null;
                 const boundaryPay = m.complete && !m.isLeave ? calcBoundaryPayroll(rec) : null;
                 const boundaryMeta = boundary && boundary.applicable && boundary.complete
-                    ? `班次边界：${boundary.shiftType === 'night' ? '夜班' : '白班'} · 边界内净工时估算 ${boundary.estimatedNetHours.toFixed(1)}h · 班内加班估算 ${boundary.estimatedShiftOvertimeHours.toFixed(1)}h${boundary.earlyArrivalMinutes > 0 ? ` · 提前到岗 ${(boundary.earlyArrivalMinutes / 60).toFixed(1)}h（不计）` : ''}${boundary.lateArrivalMinutes > 0 ? ` · 迟到 ${(boundary.lateArrivalMinutes / 60).toFixed(1)}h` : ''}${boundary.earlyLeaveMinutes > 0 ? ` · 提前离岗 ${(boundary.earlyLeaveMinutes / 60).toFixed(1)}h` : ''}${boundary.postShiftOvertimeCandidateHours > 0 ? ` · 班后加班候选 ${boundary.postShiftOvertimeCandidateHours.toFixed(1)}h` : ''}`
+                    ? `班次边界：${boundary.shiftType === 'night' ? '夜班' : '白班'}（${rec.shiftType ? '手动' : '自动推断'}） · 边界内净工时估算 ${boundary.estimatedNetHours.toFixed(1)}h · 班内加班估算 ${boundary.estimatedShiftOvertimeHours.toFixed(1)}h${boundary.earlyArrivalMinutes > 0 ? ` · 提前到岗 ${(boundary.earlyArrivalMinutes / 60).toFixed(1)}h（不计）` : ''}${boundary.lateArrivalMinutes > 0 ? ` · 迟到 ${(boundary.lateArrivalMinutes / 60).toFixed(1)}h` : ''}${boundary.earlyLeaveMinutes > 0 ? ` · 提前离岗 ${(boundary.earlyLeaveMinutes / 60).toFixed(1)}h` : ''}${boundary.postShiftOvertimeCandidateHours > 0 ? ` · 班后加班候选 ${boundary.postShiftOvertimeCandidateHours.toFixed(1)}h` : ''}`
                     : '';
 
                 const boundaryPayMeta = boundaryPay && boundaryPay.complete
@@ -2785,7 +2807,8 @@
                 const rawDate = item['日期'] || item['考勤日期'] || item['Date'] || item['date'] || '';
                 const rawStart = item['上班时间'] || item['上班'] || item['Clock In'] || item['startTime'] || '';
                 const rawEnd = item['下班时间'] || item['下班'] || item['Clock Out'] || item['endTime'] || '';
-                const rawType = String(item['班次类型'] || item['日薪类型'] || item['类型'] || item['班次'] || item['Type'] || item['type'] || '');
+                const rawType = String(item['班次类型'] || item['日薪类型'] || item['类型'] || item['Type'] || item['type'] || '');
+                const rawShiftType = String(item['固定班次'] || item['班别'] || item['shiftType'] || item['Shift'] || '');
                 const note = String(item['备注'] || item['Note'] || item['note'] || '').trim();
 
                 const dateStr = formatExcelDate(rawDate);
@@ -2814,6 +2837,7 @@
                     startTime: isLeave ? '' : (startStr || ''),
                     endTime: isLeave ? '' : (endStr || ''),
                     type,
+                    shiftType: /夜班|night/i.test(rawShiftType || rawType) ? 'night' : (/白班|day/i.test(rawShiftType || rawType) ? 'day' : undefined),
                     note
                 });
             });
@@ -2890,7 +2914,7 @@
             pendingImportRows.forEach(newRec => {
                 const duplicate = appState.records.some(r =>
                     r.date === newRec.date && (r.startTime || '') === (newRec.startTime || '') &&
-                    (r.endTime || '') === (newRec.endTime || '') && r.type === newRec.type &&
+                    (r.endTime || '') === (newRec.endTime || '') && (r.shiftType || '') === (newRec.shiftType || '') && r.type === newRec.type &&
                     (r.note || '') === (newRec.note || '')
                 );
                 if (duplicate) { skippedCount++; return; }
@@ -2954,6 +2978,7 @@
                     '上班时间': r.startTime || '-',
                     '下班时间': r.endTime ? `${r.endTime}${m.isCrossDay ? '(次日)' : ''}` : (m.isLeave ? '-' : '未打卡'),
                     '班次类型': typeMap[r.type] || '正常工作日',
+                    '固定班次': r.shiftType === 'night' ? '夜班' : (r.shiftType === 'day' ? '白班' : '自动推断'),
                     '净工时(小时)': Number(m.netHours.toFixed(2)),
                     '正常工时(小时)': Number(m.regHours.toFixed(2)),
                     '加班工时(小时)': Number(m.otHours.toFixed(2)),
@@ -2991,11 +3016,12 @@
                 workday: '正常工作日', weekend: '周末加班', holiday: '法定节假日',
                 paid_leave: '带薪年假/调休', unpaid_leave: '事假/病假'
             };
-            const rows = [['日期', '上班时间', '下班时间', '班次类型', '净工时', '加班工时', '当日薪资', '备注']];
+            const rows = [['日期', '上班时间', '下班时间', '班次类型', '固定班次', '净工时', '加班工时', '当日薪资', '备注']];
             monthRecords.forEach(r => {
                 const m = calcRecord(r);
                 rows.push([
                     r.date, r.startTime || '', r.endTime || '', typeMap[r.type] || '正常工作日',
+                    r.shiftType === 'night' ? '夜班' : (r.shiftType === 'day' ? '白班' : '自动推断'),
                     m.netHours.toFixed(2), m.otHours.toFixed(2), m.totalPay.toFixed(2),
                     `"${(r.note || '').replace(/"/g, '""')}"`
                 ]);
