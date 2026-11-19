@@ -51,7 +51,7 @@ const sandbox = {
 };
 
 vm.runInNewContext(
-  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("calcShiftBoundary")}\n${extractFunction("calcBoundaryPayroll")}\n${extractFunction("handleQuickPunch")}\n${extractFunction("escapeHtml")}\n${extractFunction("normalizeConfig")}\n${extractFunction("isValidDateString")}\n${extractFunction("isValidRecordCollection")}\n${extractFunction("getCycleMonthForDate")}\n${extractFunction("getCycleDateRange")}\n${extractFunction("blockIfStorageProtected")}\nthis.calcRecord = calcRecord; this.calcShiftBoundary = calcShiftBoundary; this.calcBoundaryPayroll = calcBoundaryPayroll; this.handleQuickPunch = handleQuickPunch; this.escapeHtml = escapeHtml; this.normalizeConfig = normalizeConfig; this.isValidDateString = isValidDateString; this.isValidRecordCollection = isValidRecordCollection; this.getCycleMonthForDate = getCycleMonthForDate; this.getCycleDateRange = getCycleDateRange; this.blockIfStorageProtected = blockIfStorageProtected;`,
+  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("inferShiftType")}\n${extractFunction("calcShiftBoundary")}\n${extractFunction("calcBoundaryPayroll")}\n${extractFunction("handleQuickPunch")}\n${extractFunction("escapeHtml")}\n${extractFunction("normalizeConfig")}\n${extractFunction("isValidDateString")}\n${extractFunction("isValidRecordCollection")}\n${extractFunction("getCycleMonthForDate")}\n${extractFunction("getCycleDateRange")}\n${extractFunction("blockIfStorageProtected")}\nthis.calcRecord = calcRecord; this.inferShiftType = inferShiftType; this.calcShiftBoundary = calcShiftBoundary; this.calcBoundaryPayroll = calcBoundaryPayroll; this.handleQuickPunch = handleQuickPunch; this.escapeHtml = escapeHtml; this.normalizeConfig = normalizeConfig; this.isValidDateString = isValidDateString; this.isValidRecordCollection = isValidRecordCollection; this.getCycleMonthForDate = getCycleMonthForDate; this.getCycleDateRange = getCycleDateRange; this.blockIfStorageProtected = blockIfStorageProtected;`,
   sandbox
 );
 
@@ -394,4 +394,41 @@ test("boundary payroll retains weekend and holiday multipliers", () => {
   near(weekend.totalPay, 735, "weekend multiplier");
   const holiday = sandbox.calcBoundaryPayroll({ date: "2026-11-20", type: "holiday", startTime: "08:00", endTime: "20:00" });
   near(holiday.totalPay, 1102.5, "holiday multiplier");
+});
+
+
+test("legacy records infer day or night shift from punch-in time", () => {
+  assert.equal(sandbox.inferShiftType("08:00"), "day");
+  assert.equal(sandbox.inferShiftType("18:59"), "day");
+  assert.equal(sandbox.inferShiftType("19:00"), "night");
+  assert.equal(sandbox.inferShiftType("04:59"), "night");
+  assert.equal(sandbox.inferShiftType("05:00"), "day");
+});
+
+test("explicit day shift overrides inference for a late-evening punch", () => {
+  const result = sandbox.calcShiftBoundary({
+    date: "2026-11-19", type: "workday", startTime: "19:30", endTime: "08:30", shiftType: "day"
+  });
+  assert.equal(result.shiftType, "day");
+  assert.equal(result.scheduledStart, "2026-11-19 08:00");
+  assert.equal(result.scheduledEnd, "2026-11-19 20:00");
+  near(result.withinShiftMinutes, 30, "day-shift overlap minutes");
+});
+
+test("explicit night shift overrides inference and spans into the next day", () => {
+  const result = sandbox.calcShiftBoundary({
+    date: "2026-11-19", type: "workday", startTime: "19:30", endTime: "08:30", shiftType: "night"
+  });
+  assert.equal(result.shiftType, "night");
+  assert.equal(result.scheduledStart, "2026-11-19 20:00");
+  assert.equal(result.scheduledEnd, "2026-11-20 08:00");
+  near(result.withinShiftMinutes, 720, "night-shift overlap minutes");
+});
+
+test("legacy records without a saved shift type keep inference fallback", () => {
+  const result = sandbox.calcShiftBoundary({
+    date: "2026-11-19", type: "workday", startTime: "20:00", endTime: "08:00"
+  });
+  assert.equal(result.shiftType, "night");
+  assert.equal(result.scheduledEnd, "2026-11-20 08:00");
 });
