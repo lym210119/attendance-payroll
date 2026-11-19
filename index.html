@@ -984,7 +984,8 @@
             populateCycleStartSelect();
 
             const today = getLocalTodayStr();
-            currentMonth = getCycleMonthForDate(today, appState.config.cycleStartDay);
+            const affectedDate = action === 'out' && activeRec ? activeRec.date : today;
+            currentMonth = getCycleMonthForDate(affectedDate, appState.config.cycleStartDay);
             document.getElementById('globalMonthInput').value = currentMonth;
 
             syncRuleInputs();
@@ -2014,7 +2015,7 @@
 
                 const subMeta = m.isLeave
                     ? (rec.type === 'paid_leave' ? `折算标准工时 ${m.regHours.toFixed(1)}h` : '缺勤不计薪')
-                    : (m.complete ? `净工时 ${m.netHours.toFixed(1)}h` : '<span class="text-amber-600 font-medium">缺少下班时间，点击补卡</span>');
+                    : (m.complete ? `净工时 ${m.netHours.toFixed(1)}h` : '<span class="text-amber-600 font-medium">打卡时间不完整或无效，点击修正</span>');
 
                 row.innerHTML = `
                     <div class="flex items-center gap-3 min-w-0">
@@ -2521,7 +2522,7 @@
                 parsed.push({
                     id: 'imp_' + Date.now() + Math.random().toString(36).slice(2, 6),
                     date: dateStr,
-                    startTime: isLeave ? '' : (startStr || '09:00'),
+                    startTime: isLeave ? '' : (startStr || ''),
                     endTime: isLeave ? '' : (endStr || ''),
                     type,
                     note
