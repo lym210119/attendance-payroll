@@ -1563,8 +1563,8 @@
             if (!rec || rec.type === 'paid_leave' || rec.type === 'unpaid_leave') {
                 return { ...empty, complete: true, applicable: false, reason: '请假记录不适用固定班次边界' };
             }
-            const validTime = value => typeof value === 'string' && /^([01]\\d|2[0-3]):[0-5]\\d$/.test(value);
-            if (!rec.date || !/^\\d{4}-\\d{2}-\\d{2}$/.test(rec.date) || !validTime(rec.startTime) || !validTime(rec.endTime)) {
+            const validTime = value => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+            if (!rec.date || !/^\d{4}-\d{2}-\d{2}$/.test(rec.date) || !validTime(rec.startTime) || !validTime(rec.endTime)) {
                 return { ...empty, reason: '日期或打卡时间格式无效' };
             }
             const [sh, sm] = rec.startTime.split(':').map(Number);
@@ -1574,8 +1574,11 @@
             const shiftType = startClock >= 19 * 60 || startClock < 8 * 60 ? 'night' : 'day';
             const shiftStartClock = shiftType === 'night' ? 20 * 60 : 8 * 60;
             const shiftEndClock = shiftType === 'night' ? 8 * 60 : 20 * 60;
-            const baseDate = new Date(rec.date + 'T00:00:00');
-            if (Number.isNaN(baseDate.getTime())) return { ...empty, reason: '日期无法解析' };
+            const [year, month, day] = rec.date.split('-').map(Number);
+            const baseDate = new Date(year, month - 1, day);
+            if (Number.isNaN(baseDate.getTime()) || baseDate.getFullYear() !== year || baseDate.getMonth() !== month - 1 || baseDate.getDate() !== day) {
+                return { ...empty, reason: '日期无法解析' };
+            }
             const dayMs = 24 * 60 * 60 * 1000;
             const dateKey = date => {
                 const d = new Date(date);
