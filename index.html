@@ -1216,14 +1216,15 @@
             }
         }
 
-        function saveState(skipCloudPush = false) {
-            if (storageWriteBlocked) {
+        function saveState(skipCloudPush = false, allowRecovery = false) {
+            if (storageWriteBlocked && !allowRecovery) {
                 showToast('本地数据保护已启用：当前不会覆盖原始存储数据', 'error');
                 return false;
             }
             try {
                 appState.updatedAt = Date.now();
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+                if (allowRecovery) storageWriteBlocked = false;
                 if (!skipCloudPush && appState.config.cloudAutoSync && appState.config.cloudRoomId) {
                     clearTimeout(cloudSyncTimer);
                     cloudSyncTimer = setTimeout(() => pushToCloudSync(false), 1200);
@@ -1235,11 +1236,18 @@
             }
         }
 
+        function blockIfStorageProtected() {
+            if (!storageWriteBlocked) return false;
+            showToast('本地数据保护已启用：请先使用完整备份恢复，或从云端拉取有效数据', 'error');
+            return true;
+        }
+
         function saveSnapshotForUndo() {
             undoSnapshot = JSON.parse(JSON.stringify(appState.records));
         }
 
         function triggerUndo() {
+            if (blockIfStorageProtected()) return;
             if (!undoSnapshot) return;
             appState.records = undoSnapshot;
             undoSnapshot = null;
@@ -1288,6 +1296,7 @@
         // 4. 薪资规则与工时核心算法
         // =========================================================================
         function setPayMode(mode) {
+            if (blockIfStorageProtected()) return;
             appState.config.payMode = mode;
             syncRuleInputs();
             saveState();
@@ -1324,6 +1333,7 @@
         }
 
         function handleRuleInput() {
+            if (blockIfStorageProtected()) return;
             const c = appState.config;
             const prevStartDay = c.cycleStartDay || 1;
             c.hourlyRate = Math.max(0, parseFloat(document.getElementById('inHourlyRate').value) || 0);
@@ -1347,6 +1357,7 @@
         }
 
         function saveEmpMeta() {
+            if (blockIfStorageProtected()) return;
             appState.config.empName = document.getElementById('slipEmpName').value;
             appState.config.empDept = document.getElementById('slipEmpDept').value;
             saveState();
@@ -1442,6 +1453,7 @@
         // 5. 今日一键打卡与实时“窝囊费”秒级计数器 + 下班倒计时
         // =========================================================================
         function handleQuickPunch(action) {
+            if (blockIfStorageProtected()) return;
             const today = getLocalTodayStr();
             const nowTime = getLocalTimeStr();
             const todayRecs = appState.records.filter(r => r.date === today);
@@ -1780,6 +1792,7 @@
 
         function saveEditorRecord(e) {
             e.preventDefault();
+            if (blockIfStorageProtected()) return;
             saveSnapshotForUndo();
 
             const id = document.getElementById('editRecId').value;
@@ -1821,6 +1834,7 @@
         }
 
         function deleteFromEditor() {
+            if (blockIfStorageProtected()) return;
             const id = document.getElementById('editRecId').value;
             if (!id) return;
             saveSnapshotForUndo();
@@ -2119,6 +2133,7 @@
         // 8. 清空当前周期数据 & 多设备云同步引擎
         // =========================================================================
         function askClearMonth() {
+            if (blockIfStorageProtected()) return;
             const range = getCycleDateRange(currentMonth, appState.config.cycleStartDay || 1);
             const count = appState.records.filter(r => r.date >= range.startStr && r.date <= range.endStr).length;
             if (count === 0) {
@@ -2182,6 +2197,7 @@
         }
 
         function saveCloudSyncSettings() {
+            if (blockIfStorageProtected()) return;
             const roomId = document.getElementById('cloudRoomIdInput').value.trim();
             const autoSync = document.getElementById('cloudAutoSyncCheck').checked;
             if (!roomId) {
@@ -2200,6 +2216,7 @@
         }
 
         async function pushToCloudSync(manual = false) {
+            if (blockIfStorageProtected()) return;
             const roomId = (document.getElementById('cloudRoomIdInput')?.value || appState.config.cloudRoomId || '').trim();
             if (!roomId) {
                 if (manual) showToast('请先填写专属同步房间码', 'error');
@@ -2330,6 +2347,7 @@
         }
 
         function generateBackupToken() {
+            if (blockIfStorageProtected()) return;
             try {
                 const payload = JSON.stringify(appState);
                 const encoded = btoa(unescape(encodeURIComponent(payload)));
@@ -2553,6 +2571,7 @@
         }
 
         function commitParsedImport() {
+            if (blockIfStorageProtected()) return;
             if (pendingImportRows.length === 0) return;
             saveSnapshotForUndo();
 
@@ -2688,6 +2707,7 @@
         }
 
         function exportJSONBackup() {
+            if (blockIfStorageProtected()) return;
             appState.config.lastBackupAt = Date.now();
             saveState();
             const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
