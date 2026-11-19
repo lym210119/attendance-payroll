@@ -998,3 +998,1630 @@
             if (appState.config.cloudAutoSync && appState.config.cloudRoomId) {
                 pullFromCloudSync(false);
             }
+        });
+
+        function checkIosInstallBanner() {
+            const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+            const dismissed = localStorage.getItem('niuma_ios_banner_dismissed') === '1';
+            if (isIos && !isStandalone && !dismissed) {
+                document.getElementById('iosInstallBanner').classList.remove('hidden');
+            }
+        }
+
+        function dismissIosBanner() {
+            localStorage.setItem('niuma_ios_banner_dismissed', '1');
+            document.getElementById('iosInstallBanner').classList.add('hidden');
+        }
+
+        function setupMobileKeyboardAdapt() {
+            // 移动端弹窗输入框聚焦时自动滚动到可视区域中央，防止被软键盘遮挡
+            document.addEventListener('focusin', e => {
+                if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) {
+                    setTimeout(() => {
+                        e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 260);
+                }
+            });
+        }
+
+        function populateCycleStartSelect() {
+            const sel = document.getElementById('inCycleStartDay');
+            if (!sel) return;
+            sel.innerHTML = '';
+            for (let d = 1; d <= 28; d++) {
+                const opt = document.createElement('option');
+                opt.value = d;
+                opt.textContent = d === 1 ? '每月 1 号 (自然月)' : `每月 ${d} 号 (跨月周期)`;
+                sel.appendChild(opt);
+            }
+        }
+
+        function getLocalTodayStr() {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        function getYesterdayStr() {
+            const d = new Date();
+            d.setDate(d.getDate() - 1);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        function getLocalTimeStr() {
+            const d = new Date();
+            return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        }
+
+        function startClock() {
+            const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+            const update = () => {
+                const now = new Date();
+                const y = now.getFullYear();
+                const m = String(now.getMonth() + 1).padStart(2, '0');
+                const d = String(now.getDate()).padStart(2, '0');
+                const hh = String(now.getHours()).padStart(2, '0');
+                const mm = String(now.getMinutes()).padStart(2, '0');
+                const ss = String(now.getSeconds()).padStart(2, '0');
+                document.getElementById('liveDateDisplay').textContent = `${y}年${m}月${d}日 ${weekdays[now.getDay()]}`;
+                document.getElementById('liveClockDisplay').textContent = `${hh}:${mm}:${ss}`;
+
+                // 每秒刷新“今日已赚窝囊费”实时计数器与下班倒计时
+                updateLiveEarningsCounter(now);
+            };
+            update();
+            setInterval(update, 1000);
+        }
+
+        /**
+         * 计算某月份标签 (YYYY-MM) 在自定义起始日下的真实起止日期 [startDateStr, endDateStr]
+         */
+        function getCycleDateRange(cycleMonth, startDay = 1) {
+            const [y, m] = cycleMonth.split('-').map(Number);
+            if (!startDay || startDay <= 1) {
+                const lastDay = new Date(y, m, 0).getDate();
+                const startStr = `${cycleMonth}-01`;
+                const endStr = `${cycleMonth}-${String(lastDay).padStart(2, '0')}`;
+                return {
+                    startStr,
+                    endStr,
+                    shortLabel: `${String(m).padStart(2, '0')}.01 - ${String(m).padStart(2, '0')}.${String(lastDay).padStart(2, '0')}`
+                };
+            }
+            const prevDate = new Date(y, m - 2, startDay);
+            const endDate = new Date(y, m - 1, startDay - 1);
+            const fmt = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const shortFmt = d => `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+            return {
+                startStr: fmt(prevDate),
+                endStr: fmt(endDate),
+                shortLabel: `${shortFmt(prevDate)} - ${shortFmt(endDate)}`
+            };
+        }
+
+        function getCycleMonthForDate(dateStr, startDay = 1) {
+            if (!dateStr || dateStr.length < 10) return getLocalTodayStr().slice(0, 7);
+            const [y, m, d] = dateStr.split('-').map(Number);
+            if (!startDay || startDay <= 1 || d < startDay) {
+                return `${y}-${String(m).padStart(2, '0')}`;
+            }
+            const next = new Date(y, m, 1);
+            return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`;
+        }
+
+        function detectDayType(dateStr) {
+            const mmdd = dateStr.slice(5, 10);
+            if (STATUTORY_HOLIDAYS_MMDD[mmdd]) {
+                return { type: 'holiday', holidayName: STATUTORY_HOLIDAYS_MMDD[mmdd] };
+            }
+            const dow = new Date(dateStr + 'T00:00:00').getDay();
+            if (dow === 0 || dow === 6) {
+                return { type: 'weekend', holidayName: '' };
+            }
+            return { type: 'workday', holidayName: '' };
+        }
+
+        function loadState() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (parsed.config) appState.config = { ...appState.config, ...parsed.config };
+                    if (Array.isArray(parsed.records)) appState.records = parsed.records;
+                    if (parsed.updatedAt) appState.updatedAt = parsed.updatedAt;
+                }
+            } catch (e) {
+                console.error('加载本地数据失败', e);
+            }
+        }
+
+        function saveState(skipCloudPush = false) {
+            try {
+                appState.updatedAt = Date.now();
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+                if (!skipCloudPush && appState.config.cloudAutoSync && appState.config.cloudRoomId) {
+                    clearTimeout(cloudSyncTimer);
+                    cloudSyncTimer = setTimeout(() => pushToCloudSync(false), 1200);
+                }
+            } catch (e) {
+                showToast('浏览器本地存储空间不足，请导出 JSON 备份', 'error');
+            }
+        }
+
+        function saveSnapshotForUndo() {
+            undoSnapshot = JSON.parse(JSON.stringify(appState.records));
+        }
+
+        function triggerUndo() {
+            if (!undoSnapshot) return;
+            appState.records = undoSnapshot;
+            undoSnapshot = null;
+            saveState();
+            renderAll();
+            showToast('已撤销上一步操作', 'info');
+        }
+
+        // =========================================================================
+        // 3. 移动端导航切换 & 月份步进
+        // =========================================================================
+        function switchMobileTab(tabName) {
+            document.querySelectorAll('.mobile-tab-btn').forEach(btn => {
+                const active = btn.dataset.mtab === tabName;
+                btn.className = `mobile-tab-btn flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+                    active ? 'text-brand-600 font-bold' : 'text-slate-400 font-medium'
+                }`;
+            });
+            document.querySelectorAll('.mobile-section').forEach(sec => {
+                if (sec.id === `sec-${tabName}`) {
+                    sec.classList.remove('hidden');
+                } else {
+                    sec.classList.add('hidden');
+                }
+            });
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function stepMonth(delta) {
+            const [y, m] = currentMonth.split('-').map(Number);
+            const d = new Date(y, m - 1 + delta, 1);
+            currentMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            document.getElementById('globalMonthInput').value = currentMonth;
+            renderAll();
+        }
+
+        function onMonthInputChange() {
+            const val = document.getElementById('globalMonthInput').value;
+            if (val) {
+                currentMonth = val;
+                renderAll();
+            }
+        }
+
+        // =========================================================================
+        // 4. 薪资规则与工时核心算法
+        // =========================================================================
+        function setPayMode(mode) {
+            appState.config.payMode = mode;
+            syncRuleInputs();
+            saveState();
+            renderAll();
+        }
+
+        function syncRuleInputs() {
+            const c = appState.config;
+            const isHourly = c.payMode === 'hourly';
+
+            document.getElementById('tabPayHourly').className = isHourly
+                ? 'py-1.5 px-2 text-xs font-semibold rounded-lg transition cursor-pointer bg-white text-brand-600 shadow-xs'
+                : 'py-1.5 px-2 text-xs font-semibold rounded-lg transition cursor-pointer text-slate-600 hover:text-slate-900';
+            document.getElementById('tabPayMonthly').className = !isHourly
+                ? 'py-1.5 px-2 text-xs font-semibold rounded-lg transition cursor-pointer bg-white text-brand-600 shadow-xs'
+                : 'py-1.5 px-2 text-xs font-semibold rounded-lg transition cursor-pointer text-slate-600 hover:text-slate-900';
+
+            document.getElementById('boxHourlyRate').classList.toggle('hidden', !isHourly);
+            document.getElementById('boxMonthlySalary').classList.toggle('hidden', isHourly);
+
+            document.getElementById('inHourlyRate').value = c.hourlyRate;
+            document.getElementById('inMonthlySalary').value = c.monthlySalary;
+            document.getElementById('inStdHours').value = c.stdHours;
+            document.getElementById('inLunchHours').value = c.lunchHours;
+            document.getElementById('inWeekdayMult').value = c.weekdayMult;
+            document.getElementById('inWeekendMult').value = c.weekendMult;
+            document.getElementById('inHolidayMult').value = c.holidayMult;
+            document.getElementById('inBonus').value = c.bonus;
+            document.getElementById('inDeduction').value = c.deduction;
+            document.getElementById('inStrictFullAttend').checked = !!c.strictFullAttend;
+            document.getElementById('inCycleStartDay').value = c.cycleStartDay || 1;
+            document.getElementById('slipEmpName').value = c.empName || '员工本人';
+            document.getElementById('slipEmpDept').value = c.empDept || '综合业务部';
+        }
+
+        function handleRuleInput() {
+            const c = appState.config;
+            const prevStartDay = c.cycleStartDay || 1;
+            c.hourlyRate = Math.max(0, parseFloat(document.getElementById('inHourlyRate').value) || 0);
+            c.monthlySalary = Math.max(0, parseFloat(document.getElementById('inMonthlySalary').value) || 0);
+            c.stdHours = Math.max(0.5, parseFloat(document.getElementById('inStdHours').value) || 8);
+            c.lunchHours = Math.max(0, parseFloat(document.getElementById('inLunchHours').value) || 0);
+            c.weekdayMult = Math.max(1, parseFloat(document.getElementById('inWeekdayMult').value) || 1.5);
+            c.weekendMult = Math.max(1, parseFloat(document.getElementById('inWeekendMult').value) || 2.0);
+            c.holidayMult = Math.max(1, parseFloat(document.getElementById('inHolidayMult').value) || 3.0);
+            c.bonus = Math.max(0, parseFloat(document.getElementById('inBonus').value) || 0);
+            c.deduction = Math.max(0, parseFloat(document.getElementById('inDeduction').value) || 0);
+            c.strictFullAttend = document.getElementById('inStrictFullAttend').checked;
+            c.cycleStartDay = parseInt(document.getElementById('inCycleStartDay').value, 10) || 1;
+
+            if (prevStartDay !== c.cycleStartDay) {
+                currentMonth = getCycleMonthForDate(getLocalTodayStr(), c.cycleStartDay);
+                document.getElementById('globalMonthInput').value = currentMonth;
+            }
+            saveState();
+            renderAll();
+        }
+
+        function saveEmpMeta() {
+            appState.config.empName = document.getElementById('slipEmpName').value;
+            appState.config.empDept = document.getElementById('slipEmpDept').value;
+            saveState();
+        }
+
+        function getEffectiveHourlyRate() {
+            const c = appState.config;
+            if (c.payMode === 'hourly') return c.hourlyRate;
+            const monthStd = 21.75 * c.stdHours;
+            return monthStd > 0 ? c.monthlySalary / monthStd : 0;
+        }
+
+        /**
+         * 单日考勤工时与薪资精确核算 (支持跨天夜班 + 请假/调休类型)
+         */
+        function calcRecord(rec) {
+            const c = appState.config;
+            const rate = getEffectiveHourlyRate();
+
+            if (rec.type === 'paid_leave') {
+                const regHours = c.stdHours;
+                // 月薪模式的基本工资由周期汇总统一计算，避免按请假记录重复计薪。
+                const regPay = c.payMode === 'monthly' ? 0 : regHours * rate;
+                return {
+                    complete: true, isCrossDay: false, isLeave: true,
+                    netHours: regHours, regHours, otHours: 0,
+                    regPay, otWeekdayPay: 0, otWeekendPay: 0, otHolidayPay: 0, totalPay: regPay
+                };
+            }
+
+            if (rec.type === 'unpaid_leave') {
+                return {
+                    complete: true, isCrossDay: false, isLeave: true, isUnpaid: true,
+                    netHours: 0, regHours: 0, otHours: 0,
+                    regPay: 0, otWeekdayPay: 0, otWeekendPay: 0, otHolidayPay: 0, totalPay: 0
+                };
+            }
+
+            if (!rec.startTime || !rec.endTime) {
+                return { complete: false, isCrossDay: false, isLeave: false, netHours: 0, regHours: 0, otHours: 0, regPay: 0, otWeekdayPay: 0, otWeekendPay: 0, otHolidayPay: 0, totalPay: 0 };
+            }
+
+            const [sh, sm] = rec.startTime.split(':').map(Number);
+            const [eh, em] = rec.endTime.split(':').map(Number);
+            let sMin = sh * 60 + sm;
+            let eMin = eh * 60 + em;
+            let isCrossDay = false;
+            if (eMin < sMin) {
+                eMin += 24 * 60;
+                isCrossDay = true;
+            }
+
+            const rawH = (eMin - sMin) / 60;
+            const actualBreak = rawH > 5 ? Math.min(c.lunchHours, Math.max(0, rawH - 0.5)) : 0;
+            const netHours = Math.max(0, rawH - actualBreak);
+
+            let regHours = 0, otHours = 0, regPay = 0, otWeekdayPay = 0, otWeekendPay = 0, otHolidayPay = 0;
+
+            if (rec.type === 'weekend') {
+                otHours = netHours;
+                otWeekendPay = netHours * rate * c.weekendMult;
+            } else if (rec.type === 'holiday') {
+                otHours = netHours;
+                otHolidayPay = netHours * rate * c.holidayMult;
+            } else {
+                regHours = Math.min(netHours, c.stdHours);
+                otHours = Math.max(0, netHours - c.stdHours);
+                regPay = c.payMode === 'monthly' ? 0 : regHours * rate;
+                otWeekdayPay = otHours * rate * c.weekdayMult;
+            }
+
+            const totalPay = regPay + otWeekdayPay + otWeekendPay + otHolidayPay;
+            return {
+                complete: true,
+                isCrossDay,
+                isLeave: false,
+                netHours,
+                regHours,
+                otHours,
+                regPay,
+                otWeekdayPay,
+                otWeekendPay,
+                otHolidayPay,
+                totalPay
+            };
+        }
+
+        // =========================================================================
+        // 5. 今日一键打卡与实时“窝囊费”秒级计数器 + 下班倒计时
+        // =========================================================================
+        function handleQuickPunch(action) {
+            const today = getLocalTodayStr();
+            const nowTime = getLocalTimeStr();
+            saveSnapshotForUndo();
+
+            const todayRecs = appState.records.filter(r => r.date === today);
+            const activeRec = todayRecs.find(r => r.startTime && !r.endTime) || todayRecs[todayRecs.length - 1];
+
+            if (action === 'in') {
+                if (activeRec && !activeRec.endTime) {
+                    activeRec.startTime = nowTime;
+                    showToast(`已更新今日上班打卡为 ${nowTime}`, 'success', true);
+                } else if (activeRec && activeRec.endTime) {
+                    const detected = detectDayType(today);
+                    appState.records.push({
+                        id: 'id_' + Date.now(),
+                        date: today,
+                        startTime: nowTime,
+                        endTime: '',
+                        type: detected.type,
+                        note: `同日第${todayRecs.length + 1}班次`
+                    });
+                    showToast(`已开启今日第 ${todayRecs.length + 1} 班次 (${nowTime})`, 'success', true);
+                } else {
+                    const detected = detectDayType(today);
+                    appState.records.push({
+                        id: 'id_' + Date.now(),
+                        date: today,
+                        startTime: nowTime,
+                        endTime: '',
+                        type: detected.type,
+                        note: detected.holidayName ? `${detected.holidayName} 打卡` : '一键打卡'
+                    });
+                    showToast(`上班打卡成功 (${nowTime})，开始累计今日窝囊费`, 'success', true);
+                }
+            } else {
+                if (activeRec) {
+                    activeRec.endTime = nowTime;
+                    const m = calcRecord(activeRec);
+                    showToast(`下班打卡成功 (${nowTime})！本班次落袋 ¥${m.totalPay.toFixed(2)}`, 'success', true);
+                } else {
+                    const detected = detectDayType(today);
+                    const newRec = {
+                        id: 'id_' + Date.now(),
+                        date: today,
+                        startTime: '09:00',
+                        endTime: nowTime,
+                        type: detected.type,
+                        note: '下班打卡(自动补齐09:00)'
+                    };
+                    appState.records.push(newRec);
+                    const m = calcRecord(newRec);
+                    showToast(`下班打卡成功 (${nowTime})，今日落袋 ¥${m.totalPay.toFixed(2)}`, 'info', true);
+                }
+            }
+
+            currentMonth = getCycleMonthForDate(today, appState.config.cycleStartDay);
+            document.getElementById('globalMonthInput').value = currentMonth;
+            saveState();
+            renderAll();
+        }
+
+        function updateLiveEarningsCounter(now = new Date()) {
+            const today = getLocalTodayStr();
+            const todayRecs = appState.records.filter(r => r.date === today);
+            const box = document.getElementById('liveEarningsBox');
+            if (!box) return;
+
+            if (todayRecs.length === 0) {
+                box.classList.add('hidden');
+                return;
+            }
+
+            const activeRec = todayRecs.find(r => r.startTime && !r.endTime);
+            const completedRecs = todayRecs.filter(r => r.endTime || r.type === 'paid_leave' || r.type === 'unpaid_leave');
+
+            if (!activeRec && completedRecs.length === 0) {
+                box.classList.add('hidden');
+                return;
+            }
+
+            box.classList.remove('hidden');
+            const c = appState.config;
+            const rate = getEffectiveHourlyRate();
+            const labelEl = document.getElementById('liveEarningsLabel');
+            const amountEl = document.getElementById('liveEarningsAmount');
+            const badgeEl = document.getElementById('liveEarningsBadge');
+            const progTextEl = document.getElementById('liveWorkProgressText');
+            const progBarEl = document.getElementById('liveWorkProgressBar');
+            const countdownRow = document.getElementById('offWorkCountdownRow');
+            const countdownLabel = document.getElementById('offWorkCountdownLabel');
+            const expectedOffTag = document.getElementById('expectedOffTimeTag');
+
+            let settledPay = 0;
+            let settledHours = 0;
+            completedRecs.forEach(r => {
+                const m = calcRecord(r);
+                settledPay += m.totalPay;
+                settledHours += m.netHours;
+            });
+
+            if (!activeRec) {
+                const lastRec = completedRecs[completedRecs.length - 1];
+                labelEl.innerHTML = `<i data-lucide="badge-check" class="w-3.5 h-3.5 text-emerald-600"></i><span>今日已落袋战报${todayRecs.length > 1 ? ` (共${todayRecs.length}班)` : ''}</span>`;
+                amountEl.textContent = settledPay.toFixed(2);
+                badgeEl.textContent = lastRec.type === 'unpaid_leave' ? '请假无薪' : '已安全下班';
+                badgeEl.className = 'text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700';
+                const pct = Math.min(100, Math.round((settledHours / Math.max(0.5, c.stdHours)) * 100));
+                progTextEl.textContent = `${settledHours.toFixed(2)}h / ${c.stdHours}h`;
+                progBarEl.style.width = `${pct}%`;
+                countdownRow.classList.add('hidden');
+                return;
+            }
+
+            const [sh, sm] = activeRec.startTime.split(':').map(Number);
+            const startSec = sh * 3600 + sm * 60;
+            const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+            const elapsedSec = Math.max(0, nowSec - startSec);
+            const rawH = elapsedSec / 3600;
+            const actualBreak = rawH > 5 ? Math.min(c.lunchHours, Math.max(0, rawH - 0.5)) : 0;
+            const activeNetHours = Math.max(0, rawH - actualBreak);
+
+            let activePay = 0;
+            if (activeRec.type === 'weekend') {
+                activePay = activeNetHours * rate * c.weekendMult;
+            } else if (activeRec.type === 'holiday') {
+                activePay = activeNetHours * rate * c.holidayMult;
+            } else {
+                const regH = Math.min(activeNetHours, c.stdHours);
+                const otH = Math.max(0, activeNetHours - c.stdHours);
+                activePay = regH * rate + otH * rate * c.weekdayMult;
+            }
+
+            const totalLivePay = settledPay + activePay;
+            const totalLiveHours = settledHours + activeNetHours;
+
+            labelEl.innerHTML = `<i data-lucide="coins" class="w-3.5 h-3.5 text-amber-500"></i><span>今日已赚窝囊费 (每秒跳动)</span>`;
+            amountEl.textContent = totalLivePay.toFixed(2);
+            const isOt = totalLiveHours > c.stdHours || activeRec.type !== 'workday';
+            badgeEl.textContent = isOt ? '加班暴击计费中' : '搬砖回血中';
+            badgeEl.className = isOt
+                ? 'text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800'
+                : 'text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brand-100 text-brand-700';
+
+            const pct = Math.min(100, Math.round((totalLiveHours / Math.max(0.5, c.stdHours)) * 100));
+            progTextEl.textContent = `${totalLiveHours.toFixed(2)}h / ${c.stdHours}h`;
+            progBarEl.style.width = `${pct}%`;
+
+            countdownRow.classList.remove('hidden');
+            const targetTotalSec = Math.round((c.stdHours + c.lunchHours) * 3600);
+            const targetOffSec = startSec + targetTotalSec;
+            const offH = Math.floor(targetOffSec / 3600) % 24;
+            const offM = Math.floor((targetOffSec % 3600) / 60);
+            expectedOffTag.textContent = `达标时间 ${String(offH).padStart(2, '0')}:${String(offM).padStart(2, '0')}`;
+
+            const remainSec = targetOffSec - nowSec;
+            if (remainSec > 0) {
+                const rh = Math.floor(remainSec / 3600);
+                const rm = Math.floor((remainSec % 3600) / 60);
+                const rs = remainSec % 60;
+                countdownLabel.innerHTML = `<i data-lucide="hourglass" class="w-3 h-3 text-brand-500"></i><span>距离正常下班还有 <strong class="text-slate-800">${rh}小时${String(rm).padStart(2, '0')}分${String(rs).padStart(2, '0')}秒</strong></span>`;
+            } else {
+                const otSec = Math.abs(remainSec);
+                const oh = Math.floor(otSec / 3600);
+                const om = Math.floor((otSec % 3600) / 60);
+                countdownLabel.innerHTML = `<i data-lucide="flame" class="w-3 h-3 text-amber-500"></i><span class="text-amber-700 font-semibold">已进入 ${c.weekdayMult}x 加班回血模式 (+${oh}h${String(om).padStart(2, '0')}m)</span>`;
+            }
+        }
+
+        function renderTodayCard() {
+            const today = getLocalTodayStr();
+            const todayRecs = appState.records.filter(r => r.date === today);
+            const rec = todayRecs.find(r => r.startTime && !r.endTime) || todayRecs[todayRecs.length - 1];
+            const pill = document.getElementById('todayStatusPill');
+            const inEl = document.getElementById('todayInDisplay');
+            const outEl = document.getElementById('todayOutDisplay');
+            const timelineEl = document.getElementById('todayDurationTimeline');
+
+            if (!rec) {
+                pill.textContent = '今日未打卡';
+                pill.className = 'text-xs font-semibold px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 shrink-0';
+                inEl.textContent = '--:--';
+                outEl.textContent = '--:--';
+                timelineEl.innerHTML = `<span>点击下方按钮开始记录今日出勤</span><span class="text-slate-400">支持跨天夜班</span>`;
+            } else if (rec.type === 'paid_leave' || rec.type === 'unpaid_leave') {
+                pill.textContent = rec.type === 'paid_leave' ? '带薪休假' : '请假缺勤';
+                pill.className = 'text-xs font-semibold px-3 py-1.5 rounded-full bg-purple-50 text-purple-700 shrink-0';
+                inEl.textContent = '休假';
+                outEl.textContent = '全天';
+                timelineEl.innerHTML = `<span>今日已标记为${rec.type === 'paid_leave' ? '带薪年假/调休' : '事假/病假'}</span><button onclick="openRecordEditor('${rec.id}')" class="text-xs underline text-slate-500 cursor-pointer">修改</button>`;
+            } else if (rec.startTime && !rec.endTime) {
+                pill.textContent = todayRecs.length > 1 ? `第${todayRecs.length}班次中` : '工作中';
+                pill.className = 'text-xs font-semibold px-3 py-1.5 rounded-full bg-brand-50 text-brand-700 shrink-0';
+                inEl.textContent = rec.startTime;
+                outEl.textContent = '待下班';
+                timelineEl.innerHTML = `<span class="text-brand-600 font-medium">已于 ${rec.startTime} 上班，进行中...</span><button onclick="openRecordEditor('${rec.id}')" class="text-xs underline text-slate-500 cursor-pointer">修改时间</button>`;
+            } else {
+                let totalH = 0, totalOt = 0, totalPay = 0;
+                todayRecs.forEach(r => {
+                    const m = calcRecord(r);
+                    totalH += m.netHours;
+                    totalOt += m.otHours;
+                    totalPay += m.totalPay;
+                });
+                const lastM = calcRecord(rec);
+                pill.textContent = `已下班 · ${totalH.toFixed(1)}h`;
+                pill.className = 'text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 shrink-0';
+                inEl.textContent = rec.startTime;
+                outEl.innerHTML = `${rec.endTime}${lastM.isCrossDay ? '<span class="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 align-middle">次日</span>' : ''}`;
+                timelineEl.innerHTML = `<span>净工时 <strong>${totalH.toFixed(1)}h</strong> ${totalOt > 0 ? `(含加班 ${totalOt.toFixed(1)}h)` : ''}</span><span class="font-bold text-emerald-600 tabular-nums">今日 +¥${totalPay.toFixed(2)}</span>`;
+            }
+
+            updateLiveEarningsCounter(new Date());
+        }
+
+        // =========================================================================
+        // 6. 单条记录抽屉编辑器 & 昨日快捷补卡 (支持同日多班次追加)
+        // =========================================================================
+        function openYesterdayQuickFill(startTime, endTime, defaultNote) {
+            const yStr = getYesterdayStr();
+            const existing = appState.records.find(r => r.date === yStr);
+            openRecordEditor(existing ? existing.id : null, yStr);
+            document.getElementById('editRecStart').value = startTime;
+            document.getElementById('editRecEnd').value = endTime;
+            if (!document.getElementById('editRecNote').value) {
+                document.getElementById('editRecNote').value = defaultNote;
+            }
+            updateCrossDayHint();
+        }
+
+        function openRecordEditor(id, prefillDate = null) {
+            const modal = document.getElementById('recordEditorModal');
+            const delBtn = document.getElementById('btnDeleteInModal');
+            const sameDayBox = document.getElementById('sameDayModeBox');
+
+            if (id) {
+                const rec = appState.records.find(r => r.id === id);
+                if (!rec) return;
+                document.getElementById('editorModalTitle').textContent = `编辑考勤 (${rec.date})`;
+                document.getElementById('editRecId').value = rec.id;
+                document.getElementById('editRecDate').value = rec.date;
+                document.getElementById('editRecType').value = rec.type || 'workday';
+                document.getElementById('editRecStart').value = rec.startTime || '09:00';
+                document.getElementById('editRecEnd').value = rec.endTime || '';
+                document.getElementById('editRecNote').value = rec.note || '';
+                delBtn.classList.remove('hidden');
+                if (sameDayBox) sameDayBox.classList.add('hidden');
+                checkHolidayBanner(rec.date, rec.type);
+            } else {
+                const targetDate = prefillDate || getLocalTodayStr();
+                document.getElementById('editorModalTitle').textContent = '新增 / 补卡记录';
+                document.getElementById('editRecId').value = '';
+                document.getElementById('editRecDate').value = targetDate;
+                onEditorDateChange();
+                document.getElementById('editRecStart').value = '09:00';
+                document.getElementById('editRecEnd').value = '18:30';
+                document.getElementById('editRecNote').value = '';
+                delBtn.classList.add('hidden');
+                updateSameDayBoxVisibility(targetDate);
+            }
+
+            onEditorTypeChange();
+            updateCrossDayHint();
+            modal.classList.remove('hidden');
+        }
+
+        function updateSameDayBoxVisibility(dateStr) {
+            const id = document.getElementById('editRecId').value;
+            const sameDayBox = document.getElementById('sameDayModeBox');
+            if (!sameDayBox) return;
+            if (id) {
+                sameDayBox.classList.add('hidden');
+                return;
+            }
+            const hasExisting = appState.records.some(r => r.date === dateStr);
+            sameDayBox.classList.toggle('hidden', !hasExisting);
+        }
+
+        function closeRecordEditor() {
+            document.getElementById('recordEditorModal').classList.add('hidden');
+        }
+
+        function onEditorDateChange() {
+            const dStr = document.getElementById('editRecDate').value;
+            if (!dStr) return;
+            const detected = detectDayType(dStr);
+            document.getElementById('editRecType').value = detected.type;
+            checkHolidayBanner(dStr, detected.type);
+            updateSameDayBoxVisibility(dStr);
+            onEditorTypeChange();
+        }
+
+        function checkHolidayBanner(dStr, type) {
+            const banner = document.getElementById('editorHolidayBanner');
+            const textEl = document.getElementById('editorHolidayText');
+            if (!banner || !textEl) return;
+            const detected = detectDayType(dStr);
+            if (detected.holidayName && type === 'holiday') {
+                textEl.textContent = `已自动识别为法定节假日「${detected.holidayName}」，按 3 倍薪资核算`;
+                banner.classList.remove('hidden');
+            } else if (type === 'weekend') {
+                textEl.textContent = `当前日期为周末，已自动切换为「周末加班 (2x)」`;
+                banner.classList.remove('hidden');
+            } else {
+                banner.classList.add('hidden');
+            }
+        }
+
+        function onEditorTypeChange() {
+            const type = document.getElementById('editRecType').value;
+            const isLeave = type === 'paid_leave' || type === 'unpaid_leave';
+            const timeRow = document.getElementById('editorTimeRow');
+            const startInput = document.getElementById('editRecStart');
+            if (timeRow) {
+                timeRow.classList.toggle('opacity-40', isLeave);
+                timeRow.classList.toggle('pointer-events-none', isLeave);
+            }
+            if (startInput) startInput.required = !isLeave;
+        }
+
+        function updateCrossDayHint() {
+            const s = document.getElementById('editRecStart').value;
+            const e = document.getElementById('editRecEnd').value;
+            const badge = document.getElementById('crossDayBadge');
+            if (!badge) return;
+            if (!s || !e) {
+                badge.classList.add('hidden');
+                return;
+            }
+            const [sh, sm] = s.split(':').map(Number);
+            const [eh, em] = e.split(':').map(Number);
+            const isCross = (eh * 60 + em) < (sh * 60 + sm);
+            badge.classList.toggle('hidden', !isCross);
+        }
+
+        function saveEditorRecord(e) {
+            e.preventDefault();
+            saveSnapshotForUndo();
+
+            const id = document.getElementById('editRecId').value;
+            const date = document.getElementById('editRecDate').value;
+            const type = document.getElementById('editRecType').value;
+            const isLeave = type === 'paid_leave' || type === 'unpaid_leave';
+            const startTime = isLeave ? '' : document.getElementById('editRecStart').value;
+            const endTime = isLeave ? '' : document.getElementById('editRecEnd').value;
+            const note = document.getElementById('editRecNote').value.trim();
+
+            if (id) {
+                const idx = appState.records.findIndex(r => r.id === id);
+                if (idx !== -1) {
+                    appState.records[idx] = { ...appState.records[idx], date, type, startTime, endTime, note };
+                }
+                showToast('考勤记录已更新', 'success', true);
+            } else {
+                const existIdx = appState.records.findIndex(r => r.date === date);
+                const sameDayActionEl = document.querySelector('input[name="sameDayAction"]:checked');
+                const sameDayAction = sameDayActionEl ? sameDayActionEl.value : 'overwrite';
+
+                if (existIdx !== -1 && sameDayAction === 'overwrite') {
+                    appState.records[existIdx] = { ...appState.records[existIdx], type, startTime, endTime, note };
+                    showToast(`已覆盖更新 ${date} 的记录`, 'success', true);
+                } else {
+                    appState.records.push({
+                        id: 'id_' + Date.now() + Math.random().toString(36).slice(2, 5),
+                        date, type, startTime, endTime, note
+                    });
+                    showToast(existIdx !== -1 ? `已追加 ${date} 同日新班次` : `已添加 ${date} 考勤记录`, 'success', true);
+                }
+            }
+
+            currentMonth = getCycleMonthForDate(date, appState.config.cycleStartDay);
+            document.getElementById('globalMonthInput').value = currentMonth;
+            closeRecordEditor();
+            saveState();
+            renderAll();
+        }
+
+        function deleteFromEditor() {
+            const id = document.getElementById('editRecId').value;
+            if (!id) return;
+            saveSnapshotForUndo();
+            appState.records = appState.records.filter(r => r.id !== id);
+            closeRecordEditor();
+            saveState();
+            renderAll();
+            showToast('已删除该条记录', 'info', true);
+        }
+
+        // =========================================================================
+        // 7. 列表与日历双视图渲染 + 薪资结算汇总 (含全勤奖自动判定)
+        // =========================================================================
+        function switchRecordsView(mode) {
+            recordsViewMode = mode;
+            const isList = mode === 'list';
+            document.getElementById('btnViewList').className = isList
+                ? 'inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg transition cursor-pointer bg-white text-slate-900 shadow-xs'
+                : 'inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg transition cursor-pointer text-slate-500 hover:text-slate-900';
+            document.getElementById('btnViewCal').className = !isList
+                ? 'inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg transition cursor-pointer bg-white text-slate-900 shadow-xs'
+                : 'inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg transition cursor-pointer text-slate-500 hover:text-slate-900';
+
+            document.getElementById('viewListContainer').classList.toggle('hidden', !isList);
+            document.getElementById('listFilterBar').classList.toggle('hidden', !isList);
+            document.getElementById('viewCalendarContainer').classList.toggle('hidden', isList);
+            renderAll();
+        }
+
+        function setListFilter(filter) {
+            listFilter = filter;
+            document.querySelectorAll('.filter-chip').forEach(btn => {
+                const active = btn.dataset.filter === filter;
+                btn.className = `filter-chip px-3 py-1 rounded-full text-xs font-semibold cursor-pointer transition ${
+                    active ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`;
+            });
+            renderAll();
+        }
+
+        function renderAll() {
+            renderTodayCard();
+
+            const startDay = appState.config.cycleStartDay || 1;
+            const range = getCycleDateRange(currentMonth, startDay);
+
+            const monthRecords = appState.records
+                .filter(r => r.date && r.date >= range.startStr && r.date <= range.endStr)
+                .sort((a, b) => b.date.localeCompare(a.date));
+
+            const uniqueAttendDates = new Set();
+            let regHours = 0, otHours = 0, otWeekdayH = 0, otWeekendH = 0, otHolidayH = 0;
+            let regPay = 0, otWeekdayPay = 0, otWeekendPay = 0, otHolidayPay = 0;
+            let hasUnpaidOrIncomplete = false;
+
+            monthRecords.forEach(r => {
+                const m = calcRecord(r);
+                if (!m.complete || m.isUnpaid) {
+                    hasUnpaidOrIncomplete = true;
+                }
+                if (m.complete) {
+                    if (!m.isUnpaid) uniqueAttendDates.add(r.date);
+                    regHours += m.regHours;
+                    otHours += m.otHours;
+                    if (r.type === 'weekend') otWeekendH += m.otHours;
+                    else if (r.type === 'holiday') otHolidayH += m.otHours;
+                    else otWeekdayH += m.otHours;
+
+                    regPay += m.regPay;
+                    otWeekdayPay += m.otWeekdayPay;
+                    otWeekendPay += m.otWeekendPay;
+                    otHolidayPay += m.otHolidayPay;
+                }
+            });
+
+            const attendDays = uniqueAttendDates.size;
+            document.getElementById('payrollMonthTag').textContent = currentMonth;
+            document.getElementById('payrollRangeTag').textContent = range.shortLabel;
+            document.getElementById('recordsRangeBadge').textContent = range.shortLabel;
+            document.getElementById('badgeRecordCount').textContent = `${attendDays} 天 / ${monthRecords.length} 条`;
+
+            const c = appState.config;
+            const rate = getEffectiveHourlyRate();
+            const fullAttendVoided = c.strictFullAttend && hasUnpaidOrIncomplete && c.bonus > 0;
+            const appliedBonus = attendDays > 0 && !fullAttendVoided ? c.bonus : 0;
+            const appliedDeduct = attendDays > 0 ? c.deduction : 0;
+            // 月薪模式：基本工资按整个计薪周期固定计入，不依赖是否存在打卡记录。
+            const baseSalary = c.payMode === 'monthly' ? Math.max(0, Number(c.monthlySalary) || 0) : 0;
+            const displayedRegPay = baseSalary + regPay;
+            const grossPay = baseSalary + regPay + otWeekdayPay + otWeekendPay + otHolidayPay + appliedBonus;
+            const netPay = Math.max(0, grossPay - appliedDeduct);
+
+            document.getElementById('valNetPay').textContent = netPay.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('valEffectiveRate').textContent = `¥${rate.toFixed(2)}`;
+            document.getElementById('valAttendDays').textContent = attendDays;
+            document.getElementById('valRegHours').textContent = regHours.toFixed(1);
+            document.getElementById('valOtHours').textContent = otHours.toFixed(1);
+            document.getElementById('valOtWeekdayH').textContent = otWeekdayH.toFixed(1);
+            document.getElementById('valOtWeekendH').textContent = otWeekendH.toFixed(1);
+            document.getElementById('valOtHolidayH').textContent = otHolidayH.toFixed(1);
+
+            document.getElementById('valRegPay').textContent = `¥${displayedRegPay.toFixed(2)}`;
+            document.getElementById('valOtWeekdayPay').textContent = `+¥${otWeekdayPay.toFixed(2)}`;
+            document.getElementById('valOtSpecialPay').textContent = `+¥${(otWeekendPay + otHolidayPay).toFixed(2)}`;
+            document.getElementById('valBonusLabel').textContent = fullAttendVoided ? '全勤补贴(缺勤取消)' : '全勤/固定补贴';
+            document.getElementById('valBonusPay').textContent = `+¥${appliedBonus.toFixed(2)}`;
+            document.getElementById('valBonusPay').className = fullAttendVoided ? 'font-bold text-slate-400 line-through shrink-0' : 'font-bold text-emerald-300 shrink-0';
+            document.getElementById('valDeductPay').textContent = `-¥${appliedDeduct.toFixed(2)}`;
+            document.getElementById('valGrossPay').textContent = `¥${grossPay.toFixed(2)}`;
+
+            document.getElementById('slipHeaderMonth').textContent = `核算周期：${currentMonth} (${range.shortLabel})`;
+            document.getElementById('slipViewName').textContent = c.empName || '员工本人';
+            document.getElementById('slipViewDept').textContent = c.empDept || '综合业务部';
+            document.getElementById('slipRuleText').textContent = c.payMode === 'hourly'
+                ? `按小时计薪 (¥${c.hourlyRate.toFixed(2)}/h)`
+                : `月薪固定计入基本工资 ¥${c.monthlySalary}；加班参考时薪 ¥${rate.toFixed(2)}/h (按21.75天折算)`;
+            document.getElementById('slipAttendDays').textContent = `${attendDays} 天`;
+            document.getElementById('slipHoursSplit').textContent = `${regHours.toFixed(1)}h 正常 / ${otHours.toFixed(1)}h 加班`;
+            document.getElementById('slipRegPay').textContent = `¥${displayedRegPay.toFixed(2)}`;
+            document.getElementById('slipOtWeekday').textContent = `+¥${otWeekdayPay.toFixed(2)}`;
+            document.getElementById('slipOtSpecial').textContent = `+¥${(otWeekendPay + otHolidayPay).toFixed(2)}`;
+            document.getElementById('slipBonusLabel').textContent = fullAttendVoided ? '全勤奖 (因请假/缺卡取消)' : '全勤奖 / 固定补贴';
+            document.getElementById('slipBonus').textContent = `+¥${appliedBonus.toFixed(2)}`;
+            document.getElementById('slipDeduct').textContent = `-¥${appliedDeduct.toFixed(2)}`;
+            document.getElementById('slipNetTotal').textContent = netPay.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            if (recordsViewMode === 'list') {
+                renderRecordsList(monthRecords);
+            } else {
+                renderCalendarGrid(monthRecords, range);
+            }
+
+            lucide.createIcons();
+        }
+
+        function renderRecordsList(monthRecords) {
+            const wrapper = document.getElementById('recordsListWrapper');
+            const emptyBox = document.getElementById('emptyStateBox');
+            wrapper.innerHTML = '';
+
+            const filtered = monthRecords.filter(r => {
+                const m = calcRecord(r);
+                if (listFilter === 'ot') return m.complete && m.otHours > 0;
+                if (listFilter === 'leave') return r.type === 'paid_leave' || r.type === 'unpaid_leave';
+                if (listFilter === 'incomplete') return !m.complete;
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                emptyBox.classList.remove('hidden');
+                return;
+            }
+            emptyBox.classList.add('hidden');
+
+            const weekStrs = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+            const typeMap = {
+                workday: { label: '工作日', cls: 'bg-slate-100 text-slate-600' },
+                weekend: { label: '周末2x', cls: 'bg-amber-100 text-amber-800' },
+                holiday: { label: '假日3x', cls: 'bg-rose-100 text-rose-700' },
+                paid_leave: { label: '带薪假1x', cls: 'bg-purple-100 text-purple-700' },
+                unpaid_leave: { label: '请假0薪', cls: 'bg-slate-200 text-slate-600' }
+            };
+
+            filtered.forEach(rec => {
+                const m = calcRecord(rec);
+                const dow = new Date(rec.date + 'T00:00:00').getDay();
+                const tInfo = typeMap[rec.type] || typeMap.workday;
+
+                const row = document.createElement('div');
+                row.onclick = () => openRecordEditor(rec.id);
+                row.className = 'py-3 px-2 -mx-2 rounded-xl hover:bg-slate-50 active:bg-slate-100 transition flex items-center justify-between gap-3 cursor-pointer group';
+
+                const timeHeadline = m.isLeave
+                    ? (rec.type === 'paid_leave' ? '带薪年假 / 调休' : '事假 / 病假')
+                    : `${rec.startTime || '--:--'} → ${rec.endTime || '未下班'}${m.isCrossDay ? ' <span class="text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-700">次日</span>' : ''}`;
+
+                const subMeta = m.isLeave
+                    ? (rec.type === 'paid_leave' ? `折算标准工时 ${m.regHours.toFixed(1)}h` : '缺勤不计薪')
+                    : (m.complete ? `净工时 ${m.netHours.toFixed(1)}h` : '<span class="text-amber-600 font-medium">缺少下班时间，点击补卡</span>');
+
+                row.innerHTML = `
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="w-11 h-11 rounded-xl bg-slate-100 group-hover:bg-white border border-slate-200/70 flex flex-col items-center justify-center shrink-0 tabular-nums">
+                            <span class="text-sm font-extrabold text-slate-800 leading-none">${rec.date.slice(8, 10)}</span>
+                            <span class="text-[10px] text-slate-400 mt-1">${rec.date.slice(5, 7)}月·${weekStrs[dow] || ''}</span>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="text-xs sm:text-sm font-bold text-slate-800 tabular-nums">${timeHeadline}</span>
+                                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${tInfo.cls}">${tInfo.label}</span>
+                            </div>
+                            <div class="text-xs text-slate-400 truncate mt-0.5">
+                                ${subMeta}
+                                ${m.otHours > 0 ? ` · <span class="text-amber-600 font-semibold">加班 +${m.otHours.toFixed(1)}h</span>` : ''}
+                                ${rec.note ? ` · ${rec.note}` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <div class="text-right tabular-nums">
+                            <div class="text-sm font-extrabold ${m.complete && !m.isUnpaid ? 'text-emerald-600' : 'text-slate-400'}">
+                                ${m.complete ? '¥' + m.totalPay.toFixed(2) : '--'}
+                            </div>
+                        </div>
+                        <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300 group-hover:text-slate-500"></i>
+                    </div>
+                `;
+                wrapper.appendChild(row);
+            });
+        }
+
+        function renderCalendarGrid(monthRecords, range) {
+            const grid = document.getElementById('calendarGridBody');
+            grid.innerHTML = '';
+
+            const startDate = new Date(range.startStr + 'T00:00:00');
+            const endDate = new Date(range.endStr + 'T00:00:00');
+            const firstDow = startDate.getDay();
+            const todayStr = getLocalTodayStr();
+
+            const dayGroupMap = {};
+            monthRecords.forEach(r => {
+                if (!dayGroupMap[r.date]) dayGroupMap[r.date] = [];
+                dayGroupMap[r.date].push(r);
+            });
+
+            for (let i = 0; i < firstDow; i++) {
+                const blank = document.createElement('div');
+                blank.className = 'h-16 sm:h-20 rounded-xl bg-slate-50/50';
+                grid.appendChild(blank);
+            }
+
+            for (let cur = new Date(startDate); cur <= endDate; cur.setDate(cur.getDate() + 1)) {
+                const y = cur.getFullYear();
+                const m = String(cur.getMonth() + 1).padStart(2, '0');
+                const d = String(cur.getDate()).padStart(2, '0');
+                const dateStr = `${y}-${m}-${d}`;
+                const dayLabel = cur.getDate() === 1 ? `${cur.getMonth() + 1}/1` : `${cur.getDate()}`;
+                const dayRecs = dayGroupMap[dateStr] || [];
+                const firstRec = dayRecs[0] || null;
+                const isToday = dateStr === todayStr;
+
+                const cell = document.createElement('button');
+                cell.type = 'button';
+                cell.onclick = () => openRecordEditor(firstRec ? firstRec.id : null, dateStr);
+
+                let statusHtml = '<span class="text-[10px] text-slate-300 mt-auto">空闲</span>';
+                let bgCls = 'bg-slate-50/80 hover:bg-slate-100 border-slate-100';
+
+                if (dayRecs.length > 0) {
+                    let sumH = 0, sumOt = 0, sumPay = 0, anyIncomplete = false, anyLeave = false, anySpecialType = false;
+                    dayRecs.forEach(r => {
+                        const metrics = calcRecord(r);
+                        if (metrics.isLeave) anyLeave = true;
+                        if (!metrics.complete) anyIncomplete = true;
+                        if (r.type !== 'workday') anySpecialType = true;
+                        sumH += metrics.netHours;
+                        sumOt += metrics.otHours;
+                        sumPay += metrics.totalPay;
+                    });
+
+                    if (anyLeave && dayRecs.length === 1) {
+                        bgCls = 'bg-purple-50/80 hover:bg-purple-100/70 border-purple-200';
+                        statusHtml = `<span class="text-[10px] font-bold text-purple-700 mt-auto">${firstRec.type === 'paid_leave' ? '带薪假' : '请假'}</span>`;
+                    } else if (anyIncomplete) {
+                        bgCls = 'bg-amber-50/70 hover:bg-amber-100/70 border-amber-200';
+                        statusHtml = `<span class="text-[10px] font-bold text-amber-600 mt-auto">缺下班</span>`;
+                    } else if (sumOt > 0 || anySpecialType) {
+                        bgCls = 'bg-amber-50 hover:bg-amber-100/80 border-amber-200';
+                        statusHtml = `
+                            <div class="mt-auto w-full">
+                                <div class="text-[10px] font-bold text-amber-700 leading-tight">${sumH.toFixed(1)}h${dayRecs.length > 1 ? `·${dayRecs.length}班` : ''}</div>
+                                <div class="text-[9px] font-semibold text-emerald-600 truncate">¥${Math.round(sumPay)}</div>
+                            </div>`;
+                    } else {
+                        bgCls = 'bg-emerald-50/70 hover:bg-emerald-100/70 border-emerald-200';
+                        statusHtml = `
+                            <div class="mt-auto w-full">
+                                <div class="text-[10px] font-bold text-emerald-700 leading-tight">${sumH.toFixed(1)}h${dayRecs.length > 1 ? `·${dayRecs.length}班` : ''}</div>
+                                <div class="text-[9px] font-semibold text-emerald-600 truncate">¥${Math.round(sumPay)}</div>
+                            </div>`;
+                    }
+                }
+
+                cell.className = `h-16 sm:h-20 p-1.5 rounded-xl border ${bgCls} ${isToday ? 'ring-2 ring-brand-500' : ''} flex flex-col items-center text-center transition cursor-pointer tabular-nums`;
+                cell.innerHTML = `
+                    <span class="text-xs font-bold ${isToday ? 'text-brand-600' : 'text-slate-700'}">${dayLabel}</span>
+                    ${statusHtml}
+                `;
+                grid.appendChild(cell);
+            }
+        }
+
+        // =========================================================================
+        // 8. 清空当前周期数据 & 多设备云同步引擎
+        // =========================================================================
+        function askClearMonth() {
+            const range = getCycleDateRange(currentMonth, appState.config.cycleStartDay || 1);
+            const count = appState.records.filter(r => r.date >= range.startStr && r.date <= range.endStr).length;
+            if (count === 0) {
+                showToast('当前计薪周期暂无记录可清空', 'info');
+                return;
+            }
+            document.getElementById('confirmTitle').textContent = `清空 ${currentMonth} (${range.shortLabel}) 数据？`;
+            document.getElementById('confirmDesc').textContent = `将清除该周期下的 ${count} 条考勤记录（清除后可通过顶部提示条点击“撤销”恢复）。`;
+            document.getElementById('confirmActionBtn').onclick = () => {
+                saveSnapshotForUndo();
+                appState.records = appState.records.filter(r => !(r.date >= range.startStr && r.date <= range.endStr));
+                saveState();
+                renderAll();
+                closeConfirmModal();
+                showToast(`已清空 ${currentMonth} 考勤数据`, 'info', true);
+            };
+            document.getElementById('confirmModal').classList.remove('hidden');
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirmModal').classList.add('hidden');
+        }
+
+        const CLOUD_SYNC_API = 'https://kvdb.io/A2k9mP7xLq4vN8wR3tY6zB';
+
+        function generateNewCloudRoomId() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let code = 'NM-';
+            for (let i = 0; i < 12; i++) {
+                if (i === 4 || i === 8) code += '-';
+                code += chars[Math.floor(Math.random() * chars.length)];
+            }
+            document.getElementById('cloudRoomIdInput').value = code;
+        }
+
+        function updateCloudSyncUI() {
+            const c = appState.config;
+            const dot = document.getElementById('syncStatusDot');
+            const headerText = document.getElementById('headerSyncText');
+            const badge = document.getElementById('cloudSyncBadge');
+            const roomInput = document.getElementById('cloudRoomIdInput');
+            const autoCheck = document.getElementById('cloudAutoSyncCheck');
+            const timeText = document.getElementById('cloudLastSyncTimeText');
+
+            if (roomInput && c.cloudRoomId) roomInput.value = c.cloudRoomId;
+            if (autoCheck) autoCheck.checked = !!c.cloudAutoSync;
+
+            const active = !!(c.cloudAutoSync && c.cloudRoomId);
+            if (dot) dot.className = active ? 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse' : 'w-2 h-2 rounded-full bg-slate-400';
+            if (headerText) headerText.textContent = active ? '云同步已开启' : '未开启云同步';
+            if (badge) {
+                badge.textContent = active ? '自动同步中' : '未连接';
+                badge.className = active
+                    ? 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700'
+                    : 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600';
+            }
+            if (timeText && c.lastCloudSyncAt) {
+                const d = new Date(c.lastCloudSyncAt);
+                timeText.textContent = `上次同步：${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+            }
+        }
+
+        function saveCloudSyncSettings() {
+            const roomId = document.getElementById('cloudRoomIdInput').value.trim();
+            const autoSync = document.getElementById('cloudAutoSyncCheck').checked;
+            if (!roomId) {
+                showToast('请先输入或生成一个专属同步房间码', 'error');
+                return;
+            }
+            appState.config.cloudRoomId = roomId;
+            appState.config.cloudAutoSync = autoSync;
+            saveState(true);
+            updateCloudSyncUI();
+            if (autoSync) {
+                pushToCloudSync(true);
+            } else {
+                showToast('云同步配置已保存', 'success');
+            }
+        }
+
+        async function pushToCloudSync(manual = false) {
+            const roomId = (document.getElementById('cloudRoomIdInput')?.value || appState.config.cloudRoomId || '').trim();
+            if (!roomId) {
+                if (manual) showToast('请先填写专属同步房间码', 'error');
+                return;
+            }
+            appState.config.cloudRoomId = roomId;
+            try {
+                const safeKey = encodeURIComponent(roomId.replace(/[^a-zA-Z0-9_-]/g, '_'));
+                const res = await fetch(`${CLOUD_SYNC_API}/${safeKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        updatedAt: appState.updatedAt || Date.now(),
+                        config: appState.config,
+                        records: appState.records
+                    })
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                appState.config.lastCloudSyncAt = Date.now();
+                saveState(true);
+                updateCloudSyncUI();
+                if (manual) showToast('已成功同步上传至云端！', 'success');
+            } catch (err) {
+                if (manual) showToast('云端上传失败，请检查网络连接或改用口令备份', 'error');
+            }
+        }
+
+        async function pullFromCloudSync(manual = false) {
+            const roomId = (document.getElementById('cloudRoomIdInput')?.value || appState.config.cloudRoomId || '').trim();
+            if (!roomId) {
+                if (manual) showToast('请先填写专属同步房间码', 'error');
+                return;
+            }
+            appState.config.cloudRoomId = roomId;
+            try {
+                const safeKey = encodeURIComponent(roomId.replace(/[^a-zA-Z0-9_-]/g, '_'));
+                const res = await fetch(`${CLOUD_SYNC_API}/${safeKey}`, { method: 'GET' });
+                if (res.status === 404) {
+                    if (manual) showToast('云端暂无该房间码数据，已为你自动上传当前数据', 'info');
+                    await pushToCloudSync(false);
+                    return;
+                }
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const remote = await res.json();
+                if (!remote || !Array.isArray(remote.records)) {
+                    if (manual) showToast('云端数据格式为空', 'info');
+                    return;
+                }
+
+                if (manual || (remote.updatedAt && remote.updatedAt > (appState.updatedAt || 0))) {
+                    saveSnapshotForUndo();
+                    if (remote.config) {
+                        const keepAuto = appState.config.cloudAutoSync;
+                        appState.config = { ...appState.config, ...remote.config, cloudRoomId: roomId, cloudAutoSync: keepAuto };
+                        syncRuleInputs();
+                    }
+                    appState.records = remote.records;
+                    appState.updatedAt = remote.updatedAt || Date.now();
+                    appState.config.lastCloudSyncAt = Date.now();
+                    saveState(true);
+                    updateCloudSyncUI();
+                    renderAll();
+                    showToast(`已从云端同步最新数据 (${remote.records.length} 条记录)`, 'success', true);
+                } else {
+                    appState.config.lastCloudSyncAt = Date.now();
+                    updateCloudSyncUI();
+                }
+            } catch (err) {
+                if (manual) showToast('云端拉取失败，请检查网络或核对房间码', 'error');
+            }
+        }
+
+        // =========================================================================
+        // 9. 智能数据导入、口令备份与导出中心
+        // =========================================================================
+        function openDataModal(tab = 'import') {
+            document.getElementById('dataCenterModal').classList.remove('hidden');
+            document.getElementById('importPreviewBox').classList.add('hidden');
+            pendingImportRows = [];
+            updateBackupStatusBanner();
+            updateCloudSyncUI();
+            const targetTab = ['sync', 'file', 'paste', 'token', 'export'].includes(tab) ? tab : 'file';
+            switchDataTab(targetTab);
+        }
+
+        function closeDataModal() {
+            document.getElementById('dataCenterModal').classList.add('hidden');
+        }
+
+        function switchDataTab(tab) {
+            ['sync', 'file', 'paste', 'token', 'export'].forEach(t => {
+                const active = t === tab;
+                const tabBtn = document.getElementById(`dtab-${t}`);
+                const panelEl = document.getElementById(`dpanel-${t}`);
+                if (tabBtn) {
+                    tabBtn.className = active
+                        ? 'pb-2.5 border-b-2 border-brand-600 text-brand-600 shrink-0 cursor-pointer flex items-center gap-1'
+                        : 'pb-2.5 border-b-2 border-transparent text-slate-500 hover:text-slate-800 shrink-0 cursor-pointer flex items-center gap-1';
+                }
+                if (panelEl) {
+                    panelEl.classList.toggle('hidden', !active);
+                }
+            });
+            if (tab === 'export' || tab === 'token' || tab === 'sync') {
+                document.getElementById('importPreviewBox').classList.add('hidden');
+            }
+            if (tab === 'token') updateBackupStatusBanner();
+            if (tab === 'sync') updateCloudSyncUI();
+        }
+
+        function updateBackupStatusBanner() {
+            const el = document.getElementById('lastBackupStatusText');
+            if (!el) return;
+            const last = appState.config.lastBackupAt;
+            if (!last) {
+                el.textContent = `当前共有 ${appState.records.length} 条记录，尚未生成过备份口令`;
+            } else {
+                const days = Math.floor((Date.now() - last) / (1000 * 3600 * 24));
+                el.textContent = days === 0
+                    ? `今日已备份（共 ${appState.records.length} 条记录）`
+                    : `距离上次备份已过 ${days} 天（共 ${appState.records.length} 条记录）`;
+            }
+        }
+
+        function generateBackupToken() {
+            try {
+                const payload = JSON.stringify(appState);
+                const encoded = btoa(unescape(encodeURIComponent(payload)));
+                const token = `NIUMA_BACKUP:${encoded}`;
+                const box = document.getElementById('generatedTokenBox');
+                box.value = token;
+                box.select();
+                document.execCommand('copy');
+
+                appState.config.lastBackupAt = Date.now();
+                saveState();
+                updateBackupStatusBanner();
+                showToast('备份口令已生成并复制到剪贴板！', 'success');
+            } catch (e) {
+                showToast('生成口令失败，请改用 JSON 文件导出备份', 'error');
+            }
+        }
+
+        function restoreFromBackupToken() {
+            const raw = document.getElementById('restoreTokenInput').value.trim();
+            if (!raw) {
+                showToast('请先粘贴备份口令', 'error');
+                return;
+            }
+            try {
+                const clean = raw.startsWith('NIUMA_BACKUP:') ? raw.slice('NIUMA_BACKUP:'.length).trim() : raw;
+                const decoded = decodeURIComponent(escape(atob(clean)));
+                const parsed = JSON.parse(decoded);
+                if (!parsed || !Array.isArray(parsed.records)) {
+                    throw new Error('Invalid format');
+                }
+                saveSnapshotForUndo();
+                if (parsed.config) {
+                    appState.config = { ...appState.config, ...parsed.config };
+                    syncRuleInputs();
+                }
+                appState.records = parsed.records;
+                saveState();
+                closeDataModal();
+                renderAll();
+                showToast(`口令恢复成功！已还原 ${parsed.records.length} 条考勤记录`, 'success', true);
+            } catch (e) {
+                showToast('口令格式无效或已损坏，请检查是否完整复制', 'error');
+            }
+        }
+
+        function setupDragAndDrop() {
+            const dz = document.getElementById('dropZone');
+            if (!dz) return;
+            ['dragenter', 'dragover'].forEach(evt => {
+                dz.addEventListener(evt, e => {
+                    e.preventDefault();
+                    dz.classList.add('border-brand-500', 'bg-brand-50/50');
+                });
+            });
+            ['dragleave', 'drop'].forEach(evt => {
+                dz.addEventListener(evt, e => {
+                    e.preventDefault();
+                    dz.classList.remove('border-brand-500', 'bg-brand-50/50');
+                });
+            });
+            dz.addEventListener('drop', e => {
+                const file = e.dataTransfer.files[0];
+                if (file) processUploadedFile(file);
+            });
+        }
+
+        function handleImportFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) processUploadedFile(file);
+            e.target.value = '';
+        }
+
+        function processUploadedFile(file) {
+            const name = file.name.toLowerCase();
+            if (name.endsWith('.json')) {
+                const reader = new FileReader();
+                reader.onload = ev => {
+                    try {
+                        const obj = JSON.parse(ev.target.result);
+                        const list = Array.isArray(obj) ? obj : (obj.records || []);
+                        if (obj.config) {
+                            appState.config = { ...appState.config, ...obj.config };
+                            syncRuleInputs();
+                        }
+                        normalizeAndPreviewRows(list);
+                    } catch (err) {
+                        showToast('JSON 备份文件格式解析失败', 'error');
+                    }
+                };
+                reader.readAsText(file);
+            } else {
+                const reader = new FileReader();
+                reader.onload = ev => {
+                    try {
+                        const wb = XLSX.read(ev.target.result, { type: 'array' });
+                        const targetSheetName = wb.SheetNames.find(s => s.includes('明细')) || wb.SheetNames[0];
+                        const rows = XLSX.utils.sheet_to_json(wb.Sheets[targetSheetName], { defval: '' });
+                        normalizeAndPreviewRows(rows);
+                    } catch (err) {
+                        showToast('Excel/CSV 解析失败，请确认文件未加密损坏', 'error');
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        }
+
+        function parsePastedText() {
+            const text = document.getElementById('pasteImportArea').value.trim();
+            if (!text) {
+                showToast('请先粘贴考勤表格内容', 'error');
+                return;
+            }
+            const lines = text.split(/\r?\n/).filter(l => l.trim());
+            const rawObjects = lines.map(line => {
+                const parts = line.includes('\t') ? line.split('\t') : line.split(/[,，]/);
+                return {
+                    date: (parts[0] || '').trim(),
+                    startTime: (parts[1] || '').trim(),
+                    endTime: (parts[2] || '').trim(),
+                    type: (parts[3] || '').trim(),
+                    note: (parts[4] || '').trim()
+                };
+            });
+            normalizeAndPreviewRows(rawObjects);
+        }
+
+        function normalizeAndPreviewRows(rawList) {
+            const parsed = [];
+            rawList.forEach(item => {
+                const rawDate = item['日期'] || item['考勤日期'] || item['Date'] || item['date'] || '';
+                const rawStart = item['上班时间'] || item['上班'] || item['Clock In'] || item['startTime'] || '';
+                const rawEnd = item['下班时间'] || item['下班'] || item['Clock Out'] || item['endTime'] || '';
+                const rawType = String(item['班次类型'] || item['日薪类型'] || item['类型'] || item['班次'] || item['Type'] || item['type'] || '');
+                const note = String(item['备注'] || item['Note'] || item['note'] || '').trim();
+
+                const dateStr = formatExcelDate(rawDate);
+                if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
+                const dateParts = dateStr.split('-').map(Number);
+                const dateObj = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+                if (dateObj.getFullYear() !== dateParts[0] || dateObj.getMonth() !== dateParts[1] - 1 || dateObj.getDate() !== dateParts[2]) return;
+
+                let type = 'workday';
+                if (rawType.includes('周末') || rawType === 'weekend') type = 'weekend';
+                else if (rawType.includes('节假') || rawType.includes('假日') || rawType === 'holiday') type = 'holiday';
+                else if (rawType.includes('带薪') || rawType.includes('年假') || rawType.includes('调休') || rawType === 'paid_leave') type = 'paid_leave';
+                else if (rawType.includes('事假') || rawType.includes('病假') || rawType.includes('无薪') || rawType === 'unpaid_leave') type = 'unpaid_leave';
+                else if (!rawType) {
+                    type = detectDayType(dateStr).type;
+                }
+
+                const isLeave = type === 'paid_leave' || type === 'unpaid_leave';
+                const startStr = isLeave ? '' : formatExcelTime(rawStart);
+                const endStr = isLeave ? '' : formatExcelTime(rawEnd);
+                if (!isLeave && !startStr && !endStr) return;
+
+                parsed.push({
+                    id: 'imp_' + Date.now() + Math.random().toString(36).slice(2, 6),
+                    date: dateStr,
+                    startTime: isLeave ? '' : (startStr || '09:00'),
+                    endTime: isLeave ? '' : (endStr || ''),
+                    type,
+                    note
+                });
+            });
+
+            if (parsed.length === 0) {
+                showToast('未识别到有效日期与打卡时间，请检查格式', 'error');
+                return;
+            }
+
+            pendingImportRows = parsed;
+            const tbody = document.getElementById('importPreviewTbody');
+            tbody.innerHTML = '';
+            const typeNames = {
+                workday: '工作日', weekend: '周末2x', holiday: '假日3x',
+                paid_leave: '带薪假', unpaid_leave: '请假0薪'
+            };
+
+            const escapeHtml = value => String(value ?? '').replace(/[&<>\"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]));
+            parsed.slice(0, 30).forEach(r => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="py-1.5 px-2.5 font-semibold text-slate-800">${r.date}</td>
+                    <td class="py-1.5 px-2 text-slate-600">${r.startTime || '-'}</td>
+                    <td class="py-1.5 px-2 text-slate-600">${r.endTime || (r.type.includes('leave') ? '-' : '未下班')}</td>
+                    <td class="py-1.5 px-2 text-slate-600">${typeNames[r.type] || '工作日'}</td>
+                    <td class="py-1.5 px-2 text-slate-400 truncate max-w-[120px]">${escapeHtml(r.note)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('importPreviewSummary').textContent = `已识别 ${parsed.length} 条有效考勤记录${parsed.length > 30 ? '（预览前30条）' : ''}`;
+            document.getElementById('importPreviewBox').classList.remove('hidden');
+        }
+
+        function formatExcelDate(val) {
+            if (!val) return '';
+            if (typeof val === 'number') {
+                const d = XLSX.SSF.parse_date_code(val);
+                if (d) return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
+            }
+            const s = String(val).trim().replace(/[\/\.]/g, '-');
+            const m = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+            if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+            return '';
+        }
+
+        function formatExcelTime(val) {
+            if (val === '' || val === null || val === undefined) return '';
+            if (typeof val === 'number' && val >= 0 && val < 1) {
+                const totalMins = Math.round(val * 24 * 60);
+                const hh = Math.floor(totalMins / 60) % 24;
+                const mm = totalMins % 60;
+                return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+            }
+            const m = String(val).trim().match(/(\d{1,2}):(\d{1,2})/);
+            if (m) return `${m[1].padStart(2, '0')}:${m[2].padStart(2, '0')}`;
+            return '';
+        }
+
+        function commitParsedImport() {
+            if (pendingImportRows.length === 0) return;
+            saveSnapshotForUndo();
+
+            const strategy = document.querySelector('input[name="importStrategy"]:checked').value;
+            if (strategy === 'replace') {
+                const targetMonths = new Set(pendingImportRows.map(r => getCycleMonthForDate(r.date, appState.config.cycleStartDay)));
+                appState.records = appState.records.filter(r => !targetMonths.has(getCycleMonthForDate(r.date, appState.config.cycleStartDay)));
+            }
+
+            pendingImportRows.forEach(newRec => {
+                const existIdx = appState.records.findIndex(r => r.date === newRec.date);
+                if (existIdx !== -1) {
+                    appState.records[existIdx] = newRec;
+                } else {
+                    appState.records.push(newRec);
+                }
+            });
+
+            const latestDate = pendingImportRows.map(r => r.date).sort().pop();
+            if (latestDate) {
+                currentMonth = getCycleMonthForDate(latestDate, appState.config.cycleStartDay);
+                document.getElementById('globalMonthInput').value = currentMonth;
+            }
+
+            const importedCount = pendingImportRows.length;
+            pendingImportRows = [];
+            closeDataModal();
+            saveState();
+            renderAll();
+            showToast(`成功导入 ${importedCount} 条考勤记录！`, 'success', true);
+        }
+
+        function downloadImportTemplate() {
+            const sample = [
+                { '日期': `${currentMonth}-02`, '上班时间': '09:00', '下班时间': '18:00', '班次类型': '正常工作日', '备注': '正常出勤' },
+                { '日期': `${currentMonth}-03`, '上班时间': '09:00', '下班时间': '20:30', '班次类型': '正常工作日', '备注': '晚间加班2.5小时' },
+                { '日期': `${currentMonth}-07`, '上班时间': '10:00', '下班时间': '17:00', '班次类型': '周末加班', '备注': '周末双倍薪资' }
+            ];
+            const ws = XLSX.utils.json_to_sheet(sample);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '考勤导入模板');
+            XLSX.writeFile(wb, `牛马打卡导入模板_${currentMonth}.xlsx`);
+            showToast('Excel 导入模板已下载', 'success');
+        }
+
+        function exportExcelWorkbook() {
+            const range = getCycleDateRange(currentMonth, appState.config.cycleStartDay || 1);
+            const monthRecords = appState.records
+                .filter(r => r.date >= range.startStr && r.date <= range.endStr)
+                .sort((a, b) => a.date.localeCompare(b.date));
+
+            if (monthRecords.length === 0) {
+                showToast('当前计薪周期暂无考勤数据可导出', 'error');
+                return;
+            }
+
+            const typeMap = {
+                workday: '正常工作日', weekend: '周末加班', holiday: '法定节假日',
+                paid_leave: '带薪年假/调休', unpaid_leave: '事假/病假'
+            };
+            const detailRows = monthRecords.map(r => {
+                const m = calcRecord(r);
+                return {
+                    '日期': r.date,
+                    '上班时间': r.startTime || '-',
+                    '下班时间': r.endTime ? `${r.endTime}${m.isCrossDay ? '(次日)' : ''}` : (m.isLeave ? '-' : '未打卡'),
+                    '班次类型': typeMap[r.type] || '正常工作日',
+                    '净工时(小时)': Number(m.netHours.toFixed(2)),
+                    '正常工时(小时)': Number(m.regHours.toFixed(2)),
+                    '加班工时(小时)': Number(m.otHours.toFixed(2)),
+                    '当日薪资(元)': Number(m.totalPay.toFixed(2)),
+                    '备注': r.note || ''
+                };
+            });
+
+            const summaryRows = [
+                { '结算项目': '核算周期', '数值': `${currentMonth} (${range.shortLabel})` },
+                { '结算项目': '员工姓名', '数值': appState.config.empName || '员工本人' },
+                { '结算项目': '出勤天数', '数值': `${document.getElementById('valAttendDays').textContent} 天` },
+                { '结算项目': '正常总工时', '数值': `${document.getElementById('valRegHours').textContent} 小时` },
+                { '结算项目': '加班总工时', '数值': `${document.getElementById('valOtHours').textContent} 小时` },
+                { '结算项目': '实发总工资(元)', '数值': document.getElementById('valNetPay').textContent }
+            ];
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), '月底薪资汇总');
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailRows), '每日考勤明细');
+            XLSX.writeFile(wb, `牛马打卡薪资报表_${currentMonth}.xlsx`);
+            showToast('Excel 双表结算报表已导出', 'success');
+        }
+
+        function exportCSVFile() {
+            const range = getCycleDateRange(currentMonth, appState.config.cycleStartDay || 1);
+            const monthRecords = appState.records
+                .filter(r => r.date >= range.startStr && r.date <= range.endStr)
+                .sort((a, b) => a.date.localeCompare(b.date));
+            if (monthRecords.length === 0) {
+                showToast('当前周期暂无数据可导出', 'error');
+                return;
+            }
+            const typeMap = {
+                workday: '正常工作日', weekend: '周末加班', holiday: '法定节假日',
+                paid_leave: '带薪年假/调休', unpaid_leave: '事假/病假'
+            };
+            const rows = [['日期', '上班时间', '下班时间', '班次类型', '净工时', '加班工时', '当日薪资', '备注']];
+            monthRecords.forEach(r => {
+                const m = calcRecord(r);
+                rows.push([
+                    r.date, r.startTime || '', r.endTime || '', typeMap[r.type] || '正常工作日',
+                    m.netHours.toFixed(2), m.otHours.toFixed(2), m.totalPay.toFixed(2),
+                    `"${(r.note || '').replace(/"/g, '""')}"`
+                ]);
+            });
+            const csv = '\uFEFF' + rows.map(r => r.join(',')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `牛马打卡明细_${currentMonth}.csv`;
+            a.click();
+            showToast('CSV 表格已导出', 'success');
+        }
+
+        function exportJSONBackup() {
+            appState.config.lastBackupAt = Date.now();
+            saveState();
+            const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `牛马打卡全量备份_${getLocalTodayStr()}.json`;
+            a.click();
+            showToast('全量 JSON 备份已下载', 'success');
+        }
+
+        // =========================================================================
+        // 10. 电子工资条弹窗 & 带撤销按钮的 Toast 组件
+        // =========================================================================
+        function openPayslipModal() {
+            document.getElementById('payslipModal').classList.remove('hidden');
+        }
+
+        function closePayslipModal() {
+            document.getElementById('payslipModal').classList.add('hidden');
+        }
+
+        function showToast(message, type = 'info', allowUndo = false) {
+            const container = document.getElementById('toastContainer');
+            if (!container) return;
+            const toast = document.createElement('div');
+            const colors = {
+                success: 'bg-slate-900 text-white border-slate-700',
+                error: 'bg-rose-600 text-white border-rose-500',
+                info: 'bg-slate-800 text-white border-slate-700'
+            };
+
+            toast.className = `pointer-events-auto flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl shadow-xl border text-xs sm:text-sm font-medium transition-all duration-300 ${colors[type] || colors.info}`;
+            toast.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full ${type === 'error' ? 'bg-white' : 'bg-emerald-400'}"></span>
+                    <span>${message}</span>
+                </div>
+                ${allowUndo && undoSnapshot ? `<button onclick="triggerUndo(); this.parentElement.remove();" class="text-xs font-bold text-amber-300 hover:text-amber-200 underline shrink-0 cursor-pointer">撤销</button>` : ''}
+            `;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', '-translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3800);
+        }
+    </script>
+</body>
+</html>
