@@ -364,6 +364,25 @@
                     </div>
                 </section>
 
+
+                <!-- 独立计薪边界核对：仅展示新规则，不接入原工资计算 -->
+                <section id="sec-payroll-boundary" class="mobile-section bg-white rounded-2xl border border-indigo-200 shadow-xs p-5">
+                    <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
+                        <div>
+                            <h2 class="text-base font-bold text-slate-900">计薪边界核对（试算）</h2>
+                            <p class="text-xs text-slate-500 mt-1">独立试算，不改变下方原始工资结果</p>
+                        </div>
+                        <span class="text-[10px] font-bold px-2 py-1 rounded-full bg-indigo-50 text-indigo-700">新规则预览</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 mb-3">
+                        <div class="rounded-xl bg-slate-50 p-2"><div class="text-[10px] text-slate-500">正常工时</div><div id="boundaryRegTotal" class="text-lg font-extrabold text-slate-800 tabular-nums">0.0h</div></div>
+                        <div class="rounded-xl bg-slate-50 p-2"><div class="text-[10px] text-slate-500">已确认加班</div><div id="boundaryOtTotal" class="text-lg font-extrabold text-emerald-600 tabular-nums">0.0h</div></div>
+                        <div class="rounded-xl bg-slate-50 p-2"><div class="text-[10px] text-slate-500">待处理</div><div id="boundaryPendingTotal" class="text-lg font-extrabold text-amber-600 tabular-nums">0</div></div>
+                    </div>
+                    <div id="boundaryReviewList" class="space-y-2"></div>
+                    <p class="text-[11px] text-slate-400 mt-3">此处只核对工时与审批状态；工资金额、倍率、周末及节假日计算仍完全使用原始算法。</p>
+                </section>
+
                 <!-- 板块 2: 月度考勤明细 (列表视图 / 日历视图双切换) (移动端 Tab: records) -->
                 <section id="sec-records" class="mobile-section hidden md:block bg-white rounded-2xl border border-slate-200 shadow-xs p-5">
                     <!-- 工具栏：标题 + 视图切换 + 筛选 -->
@@ -1271,6 +1290,185 @@
             return monthStd > 0 ? c.monthlySalary / monthStd : 0;
         }
 
+
+        // =========================================================================
+        // 独立计薪边界试算模块（不修改 calcRecord / 原工资算法）
+        // =========================================================================
+        function boundaryMinutes(time) {
+            if (!time || !/^\d{1,2}:\d{2}$/.test(time)) return null;
+            const parts = time.split(':').map(Number);
+            if (parts[0] > 23 || parts[1] > 59) return null;
+            return parts[0] * 60 + parts[1];
+        }
+
+        function getPayrollBoundaryResult(rec) {
+            if (!rec || rec.type === 'paid_leave' || rec.type === 'unpaid_leave') return { skipped: true };
+            const meta = rec.payrollMeta || {};
+            if (!rec.startTime || !rec.endTime) return { incomplete: true, reason: '缺少上班或下班打卡' };
+            const start = boundaryMinutes(rec.startTime);
+            const endClock = boundaryMinutes(rec.endTime);
+            if (start === null || endClock === null) return { incomplete: true, reason: '打卡时间格式异常' };
+
+            const shift = meta.shift === 'day' || meta.shift === 'night'
+                ? meta.shift
+                : (start >= 14 * 60 || start < 4 * 60 ? 'night' : 'day');
+            const shiftStart = shift === 'day' ? 8 * 60 : 20 * 60;
+            const shiftEnd = shift === 'day' ? 20 * 60 : 32 * 60;
+            let actualEnd = endClock;
+            if (actualEnd < start) actualEnd += 24 * 60;
+
+            const fullShift = start <= shiftStart && actualEnd >= shiftEnd;
+            const overlapStart = Math.max(start, shiftStart);
+            const overlapEnd = Math.min(actualEnd, shiftEnd);
+            const overlapMinutes = Math.max(0, overlapEnd - overlapStart);
+            const breakMinutes = fullShift ? 90 : (Number.isFinite(Number(meta.actualBreakMinutes)) && meta.actualBreakMinutes !== '' ? Math.max(0, Number(meta.actualBreakMinutes)) : null);
+            const breakPending = breakMinutes === null;
+            const appliedBreak = breakPending ? 0 : Math.min(breakMinutes, overlapMinutes);
+            const shiftNetMinutes = Math.max(0, overlapMinutes - appliedBreak);
+            const regularMinutes = breakPending ? 0 : Math.min(shiftNetMinutes, Number(appState.config.stdHours || 8) * 60);
+            const inShiftOtMinutes = breakPending ? 0 : Math.max(0, shiftNetMinutes - Number(appState.config.stdHours || 8) * 60);
+            const overtimeCandidateMinutes = Math.max(0, actualEnd - shiftEnd);
+            const approval = meta.overtimeApproval || (overtimeCandidateMinutes > 0 ? 'pending' : 'none');
+            const approvedMinutes = approval === 'approved'
+                ? Math.min(overtimeCandidateMinutes, Math.max(0, Number(meta.approvedOvertimeMinutes ?? overtimeCandidateMinutes)))
+                : 0;
+            return {
+                shift, shiftLabel: shift === 'day' ? '白班' : '夜班', fullShift,
+                shiftStart, shiftEnd, actualEnd, overlapMinutes, breakMinutes,
+                breakPending, appliedBreak, shiftNetMinutes, regularMinutes,
+                inShiftOtMinutes, overtimeCandidateMinutes, approval, approvedMinutes,
+                regularHours: regularMinutes / 60,
+                overtimeHours: (inShiftOtMinutes + approvedMinutes) / 60,
+                netHours: breakPending ? null : (shiftNetMinutes + approvedMinutes) / 60
+            };
+        }
+
+        function renderPayrollBoundaryReview(monthRecords) {
+            const list = document.getElementById('boundaryReviewList');
+            if (!list) return;
+            list.innerHTML = '';
+            let regularTotal = 0, overtimeTotal = 0, pendingCount = 0;
+            const workRecords = monthRecords.filter(r => r.type !== 'paid_leave' && r.type !== 'unpaid_leave');
+            if (workRecords.length === 0) {
+                list.innerHTML = '<div class="text-center text-xs text-slate-400 py-5">当前周期暂无可核对的出勤记录</div>';
+            }
+            workRecords.forEach(rec => {
+                const result = getPayrollBoundaryResult(rec);
+                const meta = rec.payrollMeta || {};
+                if (result.skipped) return;
+                if (result.breakPending || result.incomplete || (result.overtimeCandidateMinutes > 0 && result.approval === 'pending')) pendingCount++;
+                if (!result.incomplete && !result.breakPending) {
+                    regularTotal += result.regularHours;
+                    overtimeTotal += result.overtimeHours;
+                }
+                const id = String(rec.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+                const old = calcRecord(rec);
+                const oldHours = old.complete ? old.netHours.toFixed(2) + 'h' : '—';
+                let status = result.incomplete
+                    ? '<span class="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">打卡待补全</span>'
+                    : result.breakPending
+                        ? '<span class="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">待填写实际休息</span>'
+                        : result.overtimeCandidateMinutes > 0 && result.approval === 'pending'
+                            ? '<span class="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">延迟下班待确认</span>'
+                            : result.overtimeCandidateMinutes > 0 && result.approval === 'rejected'
+                                ? '<span class="text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">延迟下班未批准</span>'
+                                : '<span class="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">已核算</span>';
+                const breakText = result.incomplete ? '—' : result.breakPending ? '待填写' : (result.appliedBreak + ' 分钟');
+                const netText = result.incomplete ? '待补卡' : result.breakPending ? '待补休息' : result.netHours.toFixed(2) + ' 小时';
+                const otCandidate = result.incomplete ? 0 : result.overtimeCandidateMinutes;
+                const card = document.createElement('div');
+                card.className = 'border border-slate-200 rounded-xl p-3';
+                card.innerHTML = `
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="font-bold text-sm text-slate-800">${rec.date} <span class="text-xs font-medium text-slate-500">${result.shiftLabel || ''}</span></div>
+                        <div class="text-[10px]">${status}</div>
+                    </div>
+                    <div class="text-xs text-slate-500 mt-1">实际打卡：${rec.startTime || '--:--'} → ${rec.endTime || '未下班'}　·　原算法净工时：${oldHours}</div>
+                    <div class="grid grid-cols-3 gap-2 mt-2 text-xs">
+                        <div class="bg-slate-50 rounded-lg p-2"><div class="text-slate-400">休息扣除</div><div class="font-bold text-slate-700">${breakText}</div></div>
+                        <div class="bg-slate-50 rounded-lg p-2"><div class="text-slate-400">新规则净工时</div><div class="font-bold text-slate-700">${netText}</div></div>
+                        <div class="bg-slate-50 rounded-lg p-2"><div class="text-slate-400">班次外加班候选</div><div class="font-bold text-amber-700">${(otCandidate / 60).toFixed(2)}h</div></div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 mt-3">
+                        <label class="text-[11px] text-slate-500">班次</label>
+                        <select class="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white" onchange="setPayrollBoundaryMeta('${id}','shift',this.value)">
+                            <option value="auto" ${!meta.shift ? 'selected' : ''}>自动识别</option>
+                            <option value="day" ${meta.shift === 'day' ? 'selected' : ''}>白班</option>
+                            <option value="night" ${meta.shift === 'night' ? 'selected' : ''}>夜班</option>
+                        </select>
+                        ${!result.fullShift && !result.incomplete ? `<button onclick="editPayrollBreak('${id}')" class="text-xs font-semibold text-indigo-700 bg-indigo-50 rounded-lg px-2.5 py-1.5">填写实际休息</button>` : ''}
+                    </div>
+                    ${otCandidate > 0 ? `
+                        <div class="flex flex-wrap items-center justify-between gap-2 mt-3 pt-2 border-t border-slate-100">
+                            <div class="text-xs text-slate-600">延迟下班 ${(otCandidate / 60).toFixed(2)} 小时 · 已批准 ${(result.approvedMinutes / 60).toFixed(2)} 小时</div>
+                            <div class="flex gap-1.5">
+                                <button onclick="setPayrollOvertimeApproval('${id}','approved')" class="text-xs font-semibold text-white bg-emerald-600 rounded-lg px-2.5 py-1.5">确认加班</button>
+                                <button onclick="setPayrollOvertimeApproval('${id}','rejected')" class="text-xs font-semibold text-slate-600 bg-slate-100 rounded-lg px-2.5 py-1.5">不批准</button>
+                            </div>
+                        </div>` : ''}
+                    `;
+                list.appendChild(card);
+            });
+            document.getElementById('boundaryRegTotal').textContent = regularTotal.toFixed(1) + 'h';
+            document.getElementById('boundaryOtTotal').textContent = overtimeTotal.toFixed(1) + 'h';
+            document.getElementById('boundaryPendingTotal').textContent = String(pendingCount);
+        }
+
+        function setPayrollBoundaryMeta(recordId, key, value) {
+            const rec = appState.records.find(r => r.id === recordId);
+            if (!rec) return;
+            rec.payrollMeta = { ...(rec.payrollMeta || {}) };
+            if (value === 'auto') delete rec.payrollMeta[key];
+            else rec.payrollMeta[key] = value;
+            saveState();
+            renderAll();
+        }
+
+        function editPayrollBreak(recordId) {
+            const rec = appState.records.find(r => r.id === recordId);
+            if (!rec) return;
+            const current = rec.payrollMeta && rec.payrollMeta.actualBreakMinutes !== undefined
+                ? rec.payrollMeta.actualBreakMinutes : '';
+            const raw = prompt('请输入本班次实际休息分钟数（例如 60）。未知时请取消，不要填 0。', current);
+            if (raw === null) return;
+            const minutes = Number(raw);
+            const boundary = getPayrollBoundaryResult(rec);
+            const maxMinutes = boundary && Number.isFinite(boundary.overlapMinutes) ? boundary.overlapMinutes : 720;
+            if (!Number.isFinite(minutes) || minutes < 0 || minutes > maxMinutes) {
+                showToast('休息分钟数不能超过本班次标准边界内的实际出勤时长（' + maxMinutes + ' 分钟）', 'error');
+                return;
+            }
+            rec.payrollMeta = { ...(rec.payrollMeta || {}), actualBreakMinutes: minutes };
+            saveState();
+            renderAll();
+        }
+
+        function setPayrollOvertimeApproval(recordId, decision) {
+            const rec = appState.records.find(r => r.id === recordId);
+            if (!rec) return;
+            const result = getPayrollBoundaryResult(rec);
+            if (!result || result.incomplete || !result.overtimeCandidateMinutes) return;
+            let approvedMinutes = 0;
+            if (decision === 'approved') {
+                const raw = prompt('本次确认计入多少分钟加班？最多 ' + result.overtimeCandidateMinutes + ' 分钟。', String(result.overtimeCandidateMinutes));
+                if (raw === null) return;
+                approvedMinutes = Number(raw);
+                if (!Number.isFinite(approvedMinutes) || approvedMinutes < 0 || approvedMinutes > result.overtimeCandidateMinutes) {
+                    showToast('确认加班分钟数无效', 'error');
+                    return;
+                }
+            }
+            rec.payrollMeta = {
+                ...(rec.payrollMeta || {}),
+                overtimeApproval: decision,
+                approvedOvertimeMinutes: approvedMinutes,
+                overtimeApprovedAt: decision === 'approved' ? Date.now() : null
+            };
+            saveState();
+            renderAll();
+            showToast(decision === 'approved' ? '已保存加班确认（仅计薪边界试算）' : '已记录不批准加班（仅计薪边界试算）', 'success');
+        }
+
         /**
          * 单日考勤工时与薪资精确核算 (支持跨天夜班 + 请假/调休类型)
          */
@@ -1848,6 +2046,8 @@
             document.getElementById('slipBonus').textContent = `+¥${appliedBonus.toFixed(2)}`;
             document.getElementById('slipDeduct').textContent = `-¥${appliedDeduct.toFixed(2)}`;
             document.getElementById('slipNetTotal').textContent = netPay.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            renderPayrollBoundaryReview(monthRecords);
 
             if (recordsViewMode === 'list') {
                 renderRecordsList(monthRecords);
