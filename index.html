@@ -2254,6 +2254,10 @@
                 const subMeta = m.isLeave
                     ? (rec.type === 'paid_leave' ? `折算标准工时 ${m.regHours.toFixed(1)}h` : '缺勤不计薪')
                     : (m.complete ? `净工时 ${m.netHours.toFixed(1)}h` : '<span class="text-amber-600 font-medium">打卡时间不完整或无效，点击修正</span>');
+                const boundary = m.complete && !m.isLeave ? calcShiftBoundary(rec) : null;
+                const boundaryMeta = boundary && boundary.applicable && boundary.complete
+                    ? `班次边界：${boundary.shiftType === 'night' ? '夜班' : '白班'} · 边界内净工时估算 ${boundary.estimatedNetHours.toFixed(1)}h · 班内加班估算 ${boundary.estimatedShiftOvertimeHours.toFixed(1)}h${boundary.earlyArrivalMinutes > 0 ? ` · 提前到岗 ${(boundary.earlyArrivalMinutes / 60).toFixed(1)}h（不计）` : ''}${boundary.lateArrivalMinutes > 0 ? ` · 迟到 ${(boundary.lateArrivalMinutes / 60).toFixed(1)}h` : ''}${boundary.earlyLeaveMinutes > 0 ? ` · 提前离岗 ${(boundary.earlyLeaveMinutes / 60).toFixed(1)}h` : ''}${boundary.postShiftOvertimeCandidateHours > 0 ? ` · 班后加班候选 ${boundary.postShiftOvertimeCandidateHours.toFixed(1)}h` : ''}`
+                    : '';
 
                 row.innerHTML = `
                     <div class="flex items-center gap-3 min-w-0">
@@ -2268,6 +2272,7 @@
                             </div>
                             <div class="text-xs text-slate-400 truncate mt-0.5">
                                 ${subMeta}
+                                ${boundaryMeta ? `<div class="text-[11px] text-indigo-600 mt-1">${boundaryMeta}</div>` : ''}
                                 ${m.otHours > 0 ? ` · <span class="text-amber-600 font-semibold">加班 +${m.otHours.toFixed(1)}h</span>` : ''}
                                 ${rec.note ? ` · ${escapeHtml(rec.note)}` : ''}
                             </div>
