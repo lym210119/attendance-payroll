@@ -42,7 +42,9 @@ const sandbox = {
       lunchHours: 1,
       weekdayMult: 1.5,
       weekendMult: 2,
-      holidayMult: 3
+      holidayMult: 3,
+      cycleStartDay: 1,
+      strictFullAttend: false
     }
   }
 };
