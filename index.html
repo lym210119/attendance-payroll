@@ -1542,6 +1542,76 @@
         /**
          * 单日考勤工时与薪资精确核算 (支持跨天夜班 + 请假/调休类型)
          */
+        /**
+         * 独立的计薪边界分析（暂不接入薪资金额，避免改变既有工资结果）。
+         * 班次边界：白班 08:00-20:00；夜班 20:00-次日08:00。
+         * 实际打卡保留原值；提前到岗不增加边界内工时，延后离岗单独标记候选加班。
+         * 休息时段未记录具体起止，因此此处只扣固定休息估算值，不作为最终工资依据。
+         */
+        function calcShiftBoundary(rec, options = {}) {
+            const breakMinutes = Number.isFinite(options.breakMinutes) ? Math.max(0, options.breakMinutes) : 90;
+            const standardHours = Number.isFinite(options.standardHours) ? Math.max(0, options.standardHours) : 8;
+            const empty = {
+                complete: false, applicable: false, reason: '', shiftType: null,
+                scheduledStart: null, scheduledEnd: null, actualStart: null, actualEnd: null,
+                earlyArrivalMinutes: 0, lateArrivalMinutes: 0, earlyLeaveMinutes: 0,
+                withinShiftMinutes: 0, preShiftMinutes: 0, postShiftMinutes: 0,
+                breakMinutes, estimatedNetHours: 0, estimatedRegularHours: 0,
+                estimatedShiftOvertimeHours: 0, postShiftOvertimeCandidateHours: 0,
+                note: '边界分析仅供核对；未接入工资金额计算。'
+            };
+            if (!rec || rec.type === 'paid_leave' || rec.type === 'unpaid_leave') {
+                return { ...empty, complete: true, applicable: false, reason: '请假记录不适用固定班次边界' };
+            }
+            const validTime = value => typeof value === 'string' && /^([01]\\d|2[0-3]):[0-5]\\d$/.test(value);
+            if (!rec.date || !/^\\d{4}-\\d{2}-\\d{2}$/.test(rec.date) || !validTime(rec.startTime) || !validTime(rec.endTime)) {
+                return { ...empty, reason: '日期或打卡时间格式无效' };
+            }
+            const [sh, sm] = rec.startTime.split(':').map(Number);
+            const [eh, em] = rec.endTime.split(':').map(Number);
+            const startClock = sh * 60 + sm;
+            const endClock = eh * 60 + em;
+            const shiftType = startClock >= 19 * 60 || startClock < 8 * 60 ? 'night' : 'day';
+            const shiftStartClock = shiftType === 'night' ? 20 * 60 : 8 * 60;
+            const shiftEndClock = shiftType === 'night' ? 8 * 60 : 20 * 60;
+            const baseDate = new Date(rec.date + 'T00:00:00');
+            if (Number.isNaN(baseDate.getTime())) return { ...empty, reason: '日期无法解析' };
+            const dayMs = 24 * 60 * 60 * 1000;
+            const dateKey = date => {
+                const d = new Date(date);
+                return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+            };
+            const scheduledStart = new Date(baseDate.getTime() + shiftStartClock * 60000);
+            const scheduledEnd = new Date(baseDate.getTime() + (shiftType === 'night' ? dayMs + shiftEndClock * 60000 : shiftEndClock * 60000));
+            const actualStart = new Date(baseDate.getTime() + startClock * 60000);
+            let actualEnd = new Date(baseDate.getTime() + endClock * 60000);
+            if (actualEnd <= actualStart) actualEnd = new Date(actualEnd.getTime() + dayMs);
+            const overlapStart = Math.max(actualStart.getTime(), scheduledStart.getTime());
+            const overlapEnd = Math.min(actualEnd.getTime(), scheduledEnd.getTime());
+            const withinShiftMinutes = Math.max(0, (overlapEnd - overlapStart) / 60000);
+            const preShiftMinutes = Math.max(0, (scheduledStart.getTime() - actualStart.getTime()) / 60000);
+            const postShiftMinutes = Math.max(0, (actualEnd.getTime() - scheduledEnd.getTime()) / 60000);
+            const earlyArrivalMinutes = Math.max(0, (scheduledStart.getTime() - actualStart.getTime()) / 60000);
+            const lateArrivalMinutes = Math.max(0, (actualStart.getTime() - scheduledStart.getTime()) / 60000);
+            const earlyLeaveMinutes = Math.max(0, (scheduledEnd.getTime() - actualEnd.getTime()) / 60000);
+            const estimatedNetHours = Math.max(0, (withinShiftMinutes - Math.min(breakMinutes, withinShiftMinutes)) / 60);
+            const estimatedRegularHours = Math.min(standardHours, estimatedNetHours);
+            const estimatedShiftOvertimeHours = Math.max(0, estimatedNetHours - standardHours);
+            return {
+                complete: true, applicable: true, reason: '', shiftType,
+                scheduledStart: dateKey(scheduledStart) + ' ' + String(Math.floor(shiftStartClock / 60)).padStart(2, '0') + ':' + String(shiftStartClock % 60).padStart(2, '0'),
+                scheduledEnd: dateKey(scheduledEnd) + ' ' + String(Math.floor(shiftEndClock / 60)).padStart(2, '0') + ':' + String(shiftEndClock % 60).padStart(2, '0'),
+                actualStart: rec.date + ' ' + rec.startTime,
+                actualEnd: dateKey(actualEnd) + ' ' + rec.endTime,
+                earlyArrivalMinutes, lateArrivalMinutes, earlyLeaveMinutes,
+                withinShiftMinutes, preShiftMinutes, postShiftMinutes,
+                breakMinutes: Math.min(breakMinutes, withinShiftMinutes),
+                estimatedNetHours, estimatedRegularHours, estimatedShiftOvertimeHours,
+                postShiftOvertimeCandidateHours: postShiftMinutes / 60,
+                note: '边界分析仅供核对；休息时间按固定扣除估算，延后离岗为加班候选，暂不影响工资。'
+            };
+        }
+
         function calcRecord(rec) {
             const c = appState.config;
             const rate = getEffectiveHourlyRate();
