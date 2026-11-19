@@ -8,7 +8,7 @@ const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 
 function extractFunction(name) {
   const pattern = new RegExp(
-    `^        function ${name}\\([^\\n]*\\) \\{[\\s\\S]*?^        \\\}`,
+    `^        function ${name}\\([^\\n]*\\) \\{[\\s\\S]*?^        }`,
     "m"
   );
   const match = html.match(pattern);
@@ -32,7 +32,7 @@ const sandbox = {
 };
 
 vm.runInNewContext(
-  `${extractFunction("getEffectiveHourlyRate")}\\n${extractFunction("calcRecord")}\\nthis.calcRecord = calcRecord;`,
+  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\nthis.calcRecord = calcRecord;`,
   sandbox
 );
 
