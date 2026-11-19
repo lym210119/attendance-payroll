@@ -107,12 +107,13 @@ test("hourly paid leave is paid at standard daily hours", () => {
   near(result.totalPay, 280, "paid leave pay");
 });
 
-test("monthly paid leave does not duplicate the fixed base salary", () => {
+test("monthly paid leave is paid at standard daily hours using the converted hourly rate", () => {
   sandbox.appState.config.payMode = "monthly";
   const result = calc({ type: "paid_leave" });
+  const hourlyRate = 7000 / (21.75 * 8);
   near(result.regHours, 8, "paid leave hours");
-  near(result.regPay, 0, "record-level paid leave pay");
-  near(result.totalPay, 0, "record-level total pay");
+  near(result.regPay, 8 * hourlyRate, "paid leave pay");
+  near(result.totalPay, 8 * hourlyRate, "paid leave total pay");
   sandbox.appState.config.payMode = "hourly";
 });
 
@@ -137,12 +138,33 @@ test("invalid clock values are rejected instead of producing NaN", () => {
   near(result.totalPay, 0, "total pay");
 });
 
-test("monthly overtime uses monthly salary converted to the configured hourly rate", () => {
+test("monthly workday wages include regular hours and overtime, not a separate fixed base", () => {
   sandbox.appState.config.payMode = "monthly";
-  const result = calc({ type: "workday", startTime: "09:00", endTime: "20:00" });
   const hourlyRate = 7000 / (21.75 * 8);
-  near(result.regPay, 0, "monthly regular record pay");
-  near(result.otWeekdayPay, 2 * hourlyRate * 1.5, "monthly overtime pay");
+  const normal = calc({ type: "workday", startTime: "09:00", endTime: "18:00" });
+  near(normal.regPay, 8 * hourlyRate, "monthly regular record pay");
+  near(normal.totalPay, 8 * hourlyRate, "monthly normal shift pay");
+  const overtime = calc({ type: "workday", startTime: "09:00", endTime: "20:00" });
+  near(overtime.regPay, 8 * hourlyRate, "monthly overtime shift regular pay");
+  near(overtime.otWeekdayPay, 2 * hourlyRate * 1.5, "monthly overtime pay");
+  near(overtime.totalPay, 8 * hourlyRate + 2 * hourlyRate * 1.5, "monthly overtime shift total");
+  sandbox.appState.config.payMode = "hourly";
+});
+
+test("monthly weekend and holiday shifts use their configured multipliers on all net hours", () => {
+  sandbox.appState.config.payMode = "monthly";
+  const hourlyRate = 7000 / (21.75 * 8);
+  const weekend = calc({ type: "weekend", startTime: "10:00", endTime: "18:00" });
+  near(weekend.otWeekendPay, 7 * hourlyRate * 2, "monthly weekend pay");
+  const holiday = calc({ type: "holiday", startTime: "10:00", endTime: "18:00" });
+  near(holiday.otHolidayPay, 7 * hourlyRate * 3, "monthly holiday pay");
+  sandbox.appState.config.payMode = "hourly";
+});
+
+test("monthly unpaid leave and incomplete shifts remain unpaid", () => {
+  sandbox.appState.config.payMode = "monthly";
+  near(calc({ type: "unpaid_leave" }).totalPay, 0, "monthly unpaid leave");
+  near(calc({ type: "workday", startTime: "09:00", endTime: "" }).totalPay, 0, "monthly incomplete shift");
   sandbox.appState.config.payMode = "hourly";
 });
 
