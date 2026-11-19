@@ -67,8 +67,8 @@ jobs:
       - name: Install Playwright and Chromium
         run: |
           npm init -y
-          npm install --no-save playwright
-          npx playwright install --with-deps chromium
+          npm install --no-save --no-audit --no-fund playwright
+          npx playwright install chromium
 
       - name: Run browser smoke tests
         shell: bash
