@@ -2315,7 +2315,7 @@
                 const boundary = m.complete && !m.isLeave ? calcShiftBoundary(rec) : null;
                 const boundaryPay = m.complete && !m.isLeave ? calcBoundaryPayroll(rec) : null;
                 const boundaryMeta = boundary && boundary.applicable && boundary.complete
-                    ? `班次边界：${boundary.shiftType === 'night' ? '夜班' : '白班'} · 边界内净工时估算 ${boundary.estimatedNetHours.toFixed(1)}h · 班内加班估算 ${boundary.estimatedShiftOvertimeHours.toFixed(1)}h${boundary.earlyArrivalMinutes > 0 ? ` · 提前到岗 ${(boundary.earlyArrivalMinutes / 60).toFixed(1)}h（不计）` : ''}${boundary.lateArrivalMinutes > 0 ? ` · 迟到 ${(boundary.lateArrivalMinutes / 60).toFixed(1)}h` : ''}${boundary.earlyLeaveMinutes > 0 ? ` · 提前离岗 ${(boundary.earlyLeaveMinutes / 60).toFixed(1)}h` : ''}${boundary.postShiftOvertimeCandidateHours > 0 ? ` · 班后加班候选 ${boundary.postShiftOvertimeCandidateHours.toFixed(1)}h` : ''}`
+                    ? `班次边界：${boundary.shiftType === 'night' ? '夜班' : '白班'}（${rec.shiftType ? '手动' : '自动推断'}） · 边界内净工时估算 ${boundary.estimatedNetHours.toFixed(1)}h · 班内加班估算 ${boundary.estimatedShiftOvertimeHours.toFixed(1)}h${boundary.earlyArrivalMinutes > 0 ? ` · 提前到岗 ${(boundary.earlyArrivalMinutes / 60).toFixed(1)}h（不计）` : ''}${boundary.lateArrivalMinutes > 0 ? ` · 迟到 ${(boundary.lateArrivalMinutes / 60).toFixed(1)}h` : ''}${boundary.earlyLeaveMinutes > 0 ? ` · 提前离岗 ${(boundary.earlyLeaveMinutes / 60).toFixed(1)}h` : ''}${boundary.postShiftOvertimeCandidateHours > 0 ? ` · 班后加班候选 ${boundary.postShiftOvertimeCandidateHours.toFixed(1)}h` : ''}`
                     : '';
 
                 const boundaryPayMeta = boundaryPay && boundaryPay.complete
@@ -2807,7 +2807,8 @@
                 const rawDate = item['日期'] || item['考勤日期'] || item['Date'] || item['date'] || '';
                 const rawStart = item['上班时间'] || item['上班'] || item['Clock In'] || item['startTime'] || '';
                 const rawEnd = item['下班时间'] || item['下班'] || item['Clock Out'] || item['endTime'] || '';
-                const rawType = String(item['班次类型'] || item['日薪类型'] || item['类型'] || item['班次'] || item['Type'] || item['type'] || '');
+                const rawType = String(item['班次类型'] || item['日薪类型'] || item['类型'] || item['Type'] || item['type'] || '');
+                const rawShiftType = String(item['固定班次'] || item['班别'] || item['shiftType'] || item['Shift'] || '');
                 const note = String(item['备注'] || item['Note'] || item['note'] || '').trim();
 
                 const dateStr = formatExcelDate(rawDate);
@@ -2836,7 +2837,7 @@
                     startTime: isLeave ? '' : (startStr || ''),
                     endTime: isLeave ? '' : (endStr || ''),
                     type,
-                    shiftType: /夜班|night/i.test(rawType) ? 'night' : (/白班|day/i.test(rawType) ? 'day' : undefined),
+                    shiftType: /夜班|night/i.test(rawShiftType || rawType) ? 'night' : (/白班|day/i.test(rawShiftType || rawType) ? 'day' : undefined),
                     note
                 });
             });
@@ -2977,6 +2978,7 @@
                     '上班时间': r.startTime || '-',
                     '下班时间': r.endTime ? `${r.endTime}${m.isCrossDay ? '(次日)' : ''}` : (m.isLeave ? '-' : '未打卡'),
                     '班次类型': typeMap[r.type] || '正常工作日',
+                    '固定班次': r.shiftType === 'night' ? '夜班' : (r.shiftType === 'day' ? '白班' : '自动推断'),
                     '净工时(小时)': Number(m.netHours.toFixed(2)),
                     '正常工时(小时)': Number(m.regHours.toFixed(2)),
                     '加班工时(小时)': Number(m.otHours.toFixed(2)),
@@ -3014,11 +3016,12 @@
                 workday: '正常工作日', weekend: '周末加班', holiday: '法定节假日',
                 paid_leave: '带薪年假/调休', unpaid_leave: '事假/病假'
             };
-            const rows = [['日期', '上班时间', '下班时间', '班次类型', '净工时', '加班工时', '当日薪资', '备注']];
+            const rows = [['日期', '上班时间', '下班时间', '班次类型', '固定班次', '净工时', '加班工时', '当日薪资', '备注']];
             monthRecords.forEach(r => {
                 const m = calcRecord(r);
                 rows.push([
                     r.date, r.startTime || '', r.endTime || '', typeMap[r.type] || '正常工作日',
+                    r.shiftType === 'night' ? '夜班' : (r.shiftType === 'day' ? '白班' : '自动推断'),
                     m.netHours.toFixed(2), m.otHours.toFixed(2), m.totalPay.toFixed(2),
                     `"${(r.note || '').replace(/"/g, '""')}"`
                 ]);
