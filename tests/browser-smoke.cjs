@@ -113,6 +113,7 @@ async function stubExternalAssets(page) {
       });
       renderAll();
     });
+    assert.ok(await page.locator("#recordsListWrapper").getByText("班次边界").count(), "record list should show boundary diagnostics");
     assert.equal(await page.locator("#recordsListWrapper img").count(), 0);
     assert.equal(await page.evaluate(() => window.__attendanceXss || 0), 0);
 

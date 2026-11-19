@@ -51,7 +51,7 @@ const sandbox = {
 };
 
 vm.runInNewContext(
-  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("handleQuickPunch")}\n${extractFunction("escapeHtml")}\n${extractFunction("normalizeConfig")}\n${extractFunction("isValidDateString")}\n${extractFunction("isValidRecordCollection")}\n${extractFunction("getCycleMonthForDate")}\n${extractFunction("getCycleDateRange")}\n${extractFunction("blockIfStorageProtected")}\nthis.calcRecord = calcRecord; this.handleQuickPunch = handleQuickPunch; this.escapeHtml = escapeHtml; this.normalizeConfig = normalizeConfig; this.isValidDateString = isValidDateString; this.isValidRecordCollection = isValidRecordCollection; this.getCycleMonthForDate = getCycleMonthForDate; this.getCycleDateRange = getCycleDateRange; this.blockIfStorageProtected = blockIfStorageProtected;`,
+  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("calcShiftBoundary")}\n${extractFunction("handleQuickPunch")}\n${extractFunction("escapeHtml")}\n${extractFunction("normalizeConfig")}\n${extractFunction("isValidDateString")}\n${extractFunction("isValidRecordCollection")}\n${extractFunction("getCycleMonthForDate")}\n${extractFunction("getCycleDateRange")}\n${extractFunction("blockIfStorageProtected")}\nthis.calcRecord = calcRecord; this.calcShiftBoundary = calcShiftBoundary; this.handleQuickPunch = handleQuickPunch; this.escapeHtml = escapeHtml; this.normalizeConfig = normalizeConfig; this.isValidDateString = isValidDateString; this.isValidRecordCollection = isValidRecordCollection; this.getCycleMonthForDate = getCycleMonthForDate; this.getCycleDateRange = getCycleDateRange; this.blockIfStorageProtected = blockIfStorageProtected;`,
   sandbox
 );
 
@@ -311,4 +311,48 @@ test("an overnight clock-out keeps the cycle containing the shift start date", (
 test("attendance imports do not invent a 09:00 start when only an end time exists", () => {
   assert.match(html, /startTime: isLeave \? '' : \(startStr \|\| ''\)/);
   assert.doesNotMatch(html, /startTime: isLeave \? '' : \(startStr \|\| '09:00'\)/);
+});
+
+test("shift boundary analysis keeps early punch outside scheduled paid boundary", () => {
+  const result = sandbox.calcShiftBoundary({ date: "2026-11-19", type: "workday", startTime: "07:30", endTime: "20:00" });
+  assert.equal(result.applicable, true);
+  assert.equal(result.shiftType, "day");
+  assert.equal(result.earlyArrivalMinutes, 30);
+  assert.equal(result.withinShiftMinutes, 720);
+  near(result.estimatedNetHours, 10.5, "estimated net within shift");
+  near(result.estimatedShiftOvertimeHours, 2.5, "estimated overtime");
+});
+
+test("shift boundary analysis reports late arrival and early leave separately", () => {
+  const result = sandbox.calcShiftBoundary({ date: "2026-11-19", type: "workday", startTime: "08:30", endTime: "19:00" });
+  assert.equal(result.lateArrivalMinutes, 30);
+  assert.equal(result.earlyLeaveMinutes, 60);
+  assert.equal(result.withinShiftMinutes, 630);
+  near(result.estimatedNetHours, 9, "estimated net");
+  near(result.estimatedShiftOvertimeHours, 1, "estimated overtime");
+});
+
+test("night shift boundaries remain assigned to the shift start date", () => {
+  const result = sandbox.calcShiftBoundary({ date: "2026-11-19", type: "workday", startTime: "20:00", endTime: "08:00" });
+  assert.equal(result.shiftType, "night");
+  assert.equal(result.scheduledStart, "2026-11-19 20:00");
+  assert.equal(result.scheduledEnd, "2026-11-20 08:00");
+  assert.equal(result.actualEnd, "2026-11-20 08:00");
+  assert.equal(result.postShiftOvertimeCandidateHours, 0);
+  near(result.estimatedNetHours, 10.5, "night shift net");
+});
+
+test("night shift pre-shift arrival and post-shift departure are separate metrics", () => {
+  const result = sandbox.calcShiftBoundary({ date: "2026-11-19", type: "workday", startTime: "19:30", endTime: "08:30" });
+  assert.equal(result.shiftType, "night");
+  assert.equal(result.earlyArrivalMinutes, 30);
+  assert.equal(result.postShiftMinutes, 30);
+  near(result.postShiftOvertimeCandidateHours, 0.5, "post-shift candidate");
+});
+
+test("shift boundary analysis rejects invalid times and excludes leave records", () => {
+  const invalid = sandbox.calcShiftBoundary({ date: "2026-11-19", type: "workday", startTime: "29:99", endTime: "20:00" });
+  assert.equal(invalid.complete, false);
+  const leave = sandbox.calcShiftBoundary({ date: "2026-11-19", type: "paid_leave" });
+  assert.equal(leave.applicable, false);
 });
