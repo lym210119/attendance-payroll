@@ -33,6 +33,7 @@ const sandbox = {
   saveState: () => { saveCount++; },
   renderAll: () => { renderCount++; },
   currentMonth: "2026-11",
+  storageWriteBlocked: false,
   appState: {
     config: {
       payMode: "hourly",
@@ -50,7 +51,7 @@ const sandbox = {
 };
 
 vm.runInNewContext(
-  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("handleQuickPunch")}\n${extractFunction("escapeHtml")}\n${extractFunction("normalizeConfig")}\n${extractFunction("isValidDateString")}\n${extractFunction("isValidRecordCollection")}\n${extractFunction("getCycleMonthForDate")}\n${extractFunction("getCycleDateRange")}\nthis.calcRecord = calcRecord; this.handleQuickPunch = handleQuickPunch; this.escapeHtml = escapeHtml; this.normalizeConfig = normalizeConfig; this.isValidDateString = isValidDateString; this.isValidRecordCollection = isValidRecordCollection; this.getCycleMonthForDate = getCycleMonthForDate; this.getCycleDateRange = getCycleDateRange;`,
+  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("handleQuickPunch")}\n${extractFunction("escapeHtml")}\n${extractFunction("normalizeConfig")}\n${extractFunction("isValidDateString")}\n${extractFunction("isValidRecordCollection")}\n${extractFunction("getCycleMonthForDate")}\n${extractFunction("getCycleDateRange")}\n${extractFunction("blockIfStorageProtected")}\nthis.calcRecord = calcRecord; this.handleQuickPunch = handleQuickPunch; this.escapeHtml = escapeHtml; this.normalizeConfig = normalizeConfig; this.isValidDateString = isValidDateString; this.isValidRecordCollection = isValidRecordCollection; this.getCycleMonthForDate = getCycleMonthForDate; this.getCycleDateRange = getCycleDateRange; this.blockIfStorageProtected = blockIfStorageProtected;`,
   sandbox
 );
 
