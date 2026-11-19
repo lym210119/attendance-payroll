@@ -1295,7 +1295,7 @@
         // 独立计薪边界试算模块（不修改 calcRecord / 原工资算法）
         // =========================================================================
         function boundaryMinutes(time) {
-            if (!time || !/^\\d{1,2}:\\d{2}$/.test(time)) return null;
+            if (!time || !/^\d{1,2}:\d{2}$/.test(time)) return null;
             const parts = time.split(':').map(Number);
             if (parts[0] > 23 || parts[1] > 59) return null;
             return parts[0] * 60 + parts[1];
@@ -1356,7 +1356,7 @@
                 const result = getPayrollBoundaryResult(rec);
                 const meta = rec.payrollMeta || {};
                 if (result.skipped) return;
-                if (result.breakPending || result.incomplete) pendingCount++;
+                if (result.breakPending || result.incomplete || (result.overtimeCandidateMinutes > 0 && result.approval === 'pending')) pendingCount++;
                 if (!result.incomplete && !result.breakPending) {
                     regularTotal += result.regularHours;
                     overtimeTotal += result.overtimeHours;
