@@ -1061,6 +1061,25 @@
             }[ch]));
         }
 
+        function isValidDateString(value) {
+            if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+            const [year, month, day] = value.split('-').map(Number);
+            const date = new Date(year, month - 1, day);
+            return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+        }
+
+        function isValidRecordCollection(records) {
+            if (!Array.isArray(records)) return false;
+            return records.every(record => {
+                if (!record || typeof record !== 'object' || Array.isArray(record)) return false;
+                if (!isValidDateString(record.date)) return false;
+                return ['startTime', 'endTime', 'type', 'note'].every(key =>
+                    record[key] === undefined || record[key] === null || typeof record[key] === 'string'
+                ) && (record.id === undefined || record.id === null ||
+                    typeof record.id === 'string' || typeof record.id === 'number');
+            });
+        }
+
         function normalizeConfig(raw, base = appState.config) {
             const next = { ...base };
             if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return next;
