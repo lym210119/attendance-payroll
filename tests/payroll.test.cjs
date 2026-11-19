@@ -210,3 +210,8 @@ test("untrusted imported text is escaped before HTML rendering", () => {
   const escaped = sandbox.escapeHtml('<img src=x onerror="alert(1)"> & "note"');
   assert.equal(escaped, '&lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; &quot;note&quot;');
 });
+
+test("manual same-day records default to append instead of overwriting existing attendance", () => {
+  assert.match(html, /name="sameDayAction" value="append" checked/);
+  assert.match(html, /sameDayActionEl \? sameDayActionEl\.value : 'append'/);
+});
