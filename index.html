@@ -1055,6 +1055,12 @@
             return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
         }
 
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, ch => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[ch]));
+        }
+
         function startClock() {
             const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
             const update = () => {
@@ -1558,13 +1564,15 @@
                 pill.className = 'text-xs font-semibold px-3 py-1.5 rounded-full bg-purple-50 text-purple-700 shrink-0';
                 inEl.textContent = '休假';
                 outEl.textContent = '全天';
-                timelineEl.innerHTML = `<span>今日已标记为${rec.type === 'paid_leave' ? '带薪年假/调休' : '事假/病假'}</span><button onclick="openRecordEditor('${rec.id}')" class="text-xs underline text-slate-500 cursor-pointer">修改</button>`;
+                timelineEl.innerHTML = `<span>今日已标记为${rec.type === 'paid_leave' ? '带薪年假/调休' : '事假/病假'}</span><button type="button" id="todayEditRecordBtn" class="text-xs underline text-slate-500 cursor-pointer">修改</button>`;
+                timelineEl.querySelector('#todayEditRecordBtn').addEventListener('click', () => openRecordEditor(rec.id));
             } else if (rec.startTime && !rec.endTime) {
                 pill.textContent = rec.date < today ? '夜班进行中' : (todayRecs.length > 1 ? `第${todayRecs.length}班次中` : '工作中');
                 pill.className = 'text-xs font-semibold px-3 py-1.5 rounded-full bg-brand-50 text-brand-700 shrink-0';
                 inEl.textContent = rec.startTime;
                 outEl.textContent = '待下班';
-                timelineEl.innerHTML = `<span class="text-brand-600 font-medium">${rec.date < today ? `${rec.date} ` : ''}已于 ${rec.startTime} 上班，进行中...</span><button onclick="openRecordEditor('${rec.id}')" class="text-xs underline text-slate-500 cursor-pointer">修改时间</button>`;
+                timelineEl.innerHTML = `<span class="text-brand-600 font-medium">${rec.date < today ? `${escapeHtml(rec.date)} ` : ''}已于 ${escapeHtml(rec.startTime)} 上班，进行中...</span><button type="button" id="todayEditRecordBtn" class="text-xs underline text-slate-500 cursor-pointer">修改时间</button>`;
+                timelineEl.querySelector('#todayEditRecordBtn').addEventListener('click', () => openRecordEditor(rec.id));
             } else {
                 let totalH = 0, totalOt = 0, totalPay = 0;
                 todayRecs.forEach(r => {
@@ -1576,8 +1584,8 @@
                 const lastM = calcRecord(rec);
                 pill.textContent = `已下班 · ${totalH.toFixed(1)}h`;
                 pill.className = 'text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 shrink-0';
-                inEl.textContent = rec.startTime;
-                outEl.innerHTML = `${rec.endTime}${lastM.isCrossDay ? '<span class="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 align-middle">次日</span>' : ''}`;
+                outEl.innerHTML = `${escapeHtml(rec.endTime || '--:--')}${lastM.isCrossDay ? '<span class="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 align-middle">次日</span>' : ''}`;
+                inEl.textContent = rec.startTime || '--:--';
                 timelineEl.innerHTML = `<span>净工时 <strong>${totalH.toFixed(1)}h</strong> ${totalOt > 0 ? `(含加班 ${totalOt.toFixed(1)}h)` : ''}</span><span class="font-bold text-emerald-600 tabular-nums">今日 +¥${totalPay.toFixed(2)}</span>`;
             }
 
@@ -1912,7 +1920,8 @@
 
             filtered.forEach(rec => {
                 const m = calcRecord(rec);
-                const dow = new Date(rec.date + 'T00:00:00').getDay();
+                const safeDate = escapeHtml(String(rec.date || ''));
+                const dow = new Date(String(rec.date || '') + 'T00:00:00').getDay();
                 const tInfo = typeMap[rec.type] || typeMap.workday;
 
                 const row = document.createElement('div');
@@ -1921,7 +1930,7 @@
 
                 const timeHeadline = m.isLeave
                     ? (rec.type === 'paid_leave' ? '带薪年假 / 调休' : '事假 / 病假')
-                    : `${rec.startTime || '--:--'} → ${rec.endTime || '未下班'}${m.isCrossDay ? ' <span class="text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-700">次日</span>' : ''}`;
+                    : `${escapeHtml(rec.startTime || '--:--')} → ${escapeHtml(rec.endTime || '未下班')}${m.isCrossDay ? ' <span class="text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-700">次日</span>' : ''}`;
 
                 const subMeta = m.isLeave
                     ? (rec.type === 'paid_leave' ? `折算标准工时 ${m.regHours.toFixed(1)}h` : '缺勤不计薪')
@@ -1930,8 +1939,8 @@
                 row.innerHTML = `
                     <div class="flex items-center gap-3 min-w-0">
                         <div class="w-11 h-11 rounded-xl bg-slate-100 group-hover:bg-white border border-slate-200/70 flex flex-col items-center justify-center shrink-0 tabular-nums">
-                            <span class="text-sm font-extrabold text-slate-800 leading-none">${rec.date.slice(8, 10)}</span>
-                            <span class="text-[10px] text-slate-400 mt-1">${rec.date.slice(5, 7)}月·${weekStrs[dow] || ''}</span>
+                            <span class="text-sm font-extrabold text-slate-800 leading-none">${escapeHtml(safeDate.slice(8, 10))}</span>
+                            <span class="text-[10px] text-slate-400 mt-1">${escapeHtml(safeDate.slice(5, 7))}月·${weekStrs[dow] || ''}</span>
                         </div>
                         <div class="min-w-0">
                             <div class="flex items-center gap-1.5 flex-wrap">
@@ -1941,7 +1950,7 @@
                             <div class="text-xs text-slate-400 truncate mt-0.5">
                                 ${subMeta}
                                 ${m.otHours > 0 ? ` · <span class="text-amber-600 font-semibold">加班 +${m.otHours.toFixed(1)}h</span>` : ''}
-                                ${rec.note ? ` · ${rec.note}` : ''}
+                                ${rec.note ? ` · ${escapeHtml(rec.note)}` : ''}
                             </div>
                         </div>
                     </div>
@@ -2648,9 +2657,9 @@
             toast.innerHTML = `
                 <div class="flex items-center gap-2">
                     <span class="w-2 h-2 rounded-full ${type === 'error' ? 'bg-white' : 'bg-emerald-400'}"></span>
-                    <span>${message}</span>
+                    <span>${escapeHtml(message)}</span>
                 </div>
-                ${allowUndo && undoSnapshot ? `<button onclick="triggerUndo(); this.parentElement.remove();" class="text-xs font-bold text-amber-300 hover:text-amber-200 underline shrink-0 cursor-pointer">撤销</button>` : ''}
+                ${allowUndo && undoSnapshot ? '<button onclick="triggerUndo(); this.parentElement.remove();" class="text-xs font-bold text-amber-300 hover:text-amber-200 underline shrink-0 cursor-pointer">撤销</button>' : ''}
             `;
             container.appendChild(toast);
 
