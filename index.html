@@ -1357,8 +1357,9 @@
             saveSnapshotForUndo();
 
             const todayRecs = appState.records.filter(r => r.date === today);
+            const yesterday = getYesterdayStr();
             const activeRec = appState.records
-                .filter(r => r.startTime && !r.endTime)
+                .filter(r => r.date >= yesterday && r.date <= today && r.startTime && !r.endTime)
                 .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`))
                 .pop() || todayRecs[todayRecs.length - 1];
 
@@ -1424,8 +1425,9 @@
         function updateLiveEarningsCounter(now = new Date()) {
             const today = getLocalTodayStr();
             const todayRecs = appState.records.filter(r => r.date === today);
+            const yesterday = getYesterdayStr();
             const activeRec = appState.records
-                .filter(r => r.startTime && !r.endTime)
+                .filter(r => r.date >= yesterday && r.date <= today && r.startTime && !r.endTime)
                 .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`))
                 .pop();
             const box = document.getElementById('liveEarningsBox');
@@ -1538,7 +1540,7 @@
             const today = getLocalTodayStr();
             const todayRecs = appState.records.filter(r => r.date === today);
             const overnightActive = appState.records
-                .filter(r => r.date < today && r.startTime && !r.endTime)
+                .filter(r => r.date === getYesterdayStr() && r.startTime && !r.endTime)
                 .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`))
                 .pop();
             const rec = overnightActive || todayRecs.find(r => r.startTime && !r.endTime) || todayRecs[todayRecs.length - 1];
