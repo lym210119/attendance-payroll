@@ -48,7 +48,7 @@ const sandbox = {
 };
 
 vm.runInNewContext(
-  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("handleQuickPunch")}\nthis.calcRecord = calcRecord; this.handleQuickPunch = handleQuickPunch;`,
+  `${extractFunction("getEffectiveHourlyRate")}\n${extractFunction("calcRecord")}\n${extractFunction("handleQuickPunch")}\n${extractFunction("escapeHtml")}\nthis.calcRecord = calcRecord; this.handleQuickPunch = handleQuickPunch; this.escapeHtml = escapeHtml;`,
   sandbox
 );
 
@@ -204,4 +204,9 @@ test("clock-out closes the active shift using the current actual time", () => {
   assert.equal(saveCount, 1);
   assert.equal(renderCount, 1);
   assert.match(toastMessages[0], /下班打卡成功/);
+});
+
+test("untrusted imported text is escaped before HTML rendering", () => {
+  const escaped = sandbox.escapeHtml('<img src=x onerror="alert(1)"> & "note"');
+  assert.equal(escaped, '&lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; &quot;note&quot;');
 });
