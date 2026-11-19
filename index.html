@@ -972,6 +972,7 @@
         let listFilter = 'all';      // 'all' | 'ot' | 'leave' | 'incomplete'
         let undoSnapshot = null;     // 用于“撤销”操作的快照
         let pendingImportRows = [];  // 待确认导入的解析记录
+        let pendingImportConfig = null; // JSON 配置暂存，确认导入前不修改当前设置
         let cloudSyncTimer = null;
 
         // =========================================================================
@@ -1356,12 +1357,20 @@
             saveSnapshotForUndo();
 
             const todayRecs = appState.records.filter(r => r.date === today);
-            const activeRec = todayRecs.find(r => r.startTime && !r.endTime) || todayRecs[todayRecs.length - 1];
+            const activeRec = appState.records
+                .filter(r => r.startTime && !r.endTime)
+                .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`))
+                .pop() || todayRecs[todayRecs.length - 1];
 
             if (action === 'in') {
                 if (activeRec && !activeRec.endTime) {
-                    activeRec.startTime = nowTime;
-                    showToast(`已更新今日上班打卡为 ${nowTime}`, 'success', true);
+                    if (activeRec.date === today) {
+                        activeRec.startTime = nowTime;
+                        showToast(`已更新今日上班打卡为 ${nowTime}`, 'success', true);
+                    } else {
+                        showToast(`当前仍有 ${activeRec.date} 开始的夜班未下班，请先完成下班打卡`, 'error');
+                        return;
+                    }
                 } else if (activeRec && activeRec.endTime) {
                     const detected = detectDayType(today);
                     appState.records.push({
@@ -1415,15 +1424,18 @@
         function updateLiveEarningsCounter(now = new Date()) {
             const today = getLocalTodayStr();
             const todayRecs = appState.records.filter(r => r.date === today);
+            const activeRec = appState.records
+                .filter(r => r.startTime && !r.endTime)
+                .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`))
+                .pop();
             const box = document.getElementById('liveEarningsBox');
             if (!box) return;
 
-            if (todayRecs.length === 0) {
+            if (todayRecs.length === 0 && !activeRec) {
                 box.classList.add('hidden');
                 return;
             }
 
-            const activeRec = todayRecs.find(r => r.startTime && !r.endTime);
             const completedRecs = todayRecs.filter(r => r.endTime || r.type === 'paid_leave' || r.type === 'unpaid_leave');
 
             if (!activeRec && completedRecs.length === 0) {
@@ -1465,9 +1477,11 @@
             }
 
             const [sh, sm] = activeRec.startTime.split(':').map(Number);
+            const [sy, smo, sd] = activeRec.date.split('-').map(Number);
+            const shiftStart = new Date(sy, smo - 1, sd, sh, sm, 0, 0);
+            const elapsedSec = Math.max(0, Math.floor((now.getTime() - shiftStart.getTime()) / 1000));
             const startSec = sh * 3600 + sm * 60;
             const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
-            const elapsedSec = Math.max(0, nowSec - startSec);
             const rawH = elapsedSec / 3600;
             const actualBreak = rawH > 5 ? Math.min(c.lunchHours, Math.max(0, rawH - 0.5)) : 0;
             const activeNetHours = Math.max(0, rawH - actualBreak);
@@ -1500,12 +1514,13 @@
 
             countdownRow.classList.remove('hidden');
             const targetTotalSec = Math.round((c.stdHours + c.lunchHours) * 3600);
-            const targetOffSec = startSec + targetTotalSec;
-            const offH = Math.floor(targetOffSec / 3600) % 24;
-            const offM = Math.floor((targetOffSec % 3600) / 60);
-            expectedOffTag.textContent = `达标时间 ${String(offH).padStart(2, '0')}:${String(offM).padStart(2, '0')}`;
+            const targetOffAt = new Date(shiftStart.getTime() + targetTotalSec * 1000);
+            const offH = targetOffAt.getHours();
+            const offM = targetOffAt.getMinutes();
+            const offDateLabel = targetOffAt.toDateString() !== shiftStart.toDateString() ? '次日 ' : '';
+            expectedOffTag.textContent = `达标时间 ${offDateLabel}${String(offH).padStart(2, '0')}:${String(offM).padStart(2, '0')}`;
 
-            const remainSec = targetOffSec - nowSec;
+            const remainSec = Math.floor((targetOffAt.getTime() - now.getTime()) / 1000);
             if (remainSec > 0) {
                 const rh = Math.floor(remainSec / 3600);
                 const rm = Math.floor((remainSec % 3600) / 60);
@@ -1522,7 +1537,11 @@
         function renderTodayCard() {
             const today = getLocalTodayStr();
             const todayRecs = appState.records.filter(r => r.date === today);
-            const rec = todayRecs.find(r => r.startTime && !r.endTime) || todayRecs[todayRecs.length - 1];
+            const overnightActive = appState.records
+                .filter(r => r.date < today && r.startTime && !r.endTime)
+                .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`))
+                .pop();
+            const rec = overnightActive || todayRecs.find(r => r.startTime && !r.endTime) || todayRecs[todayRecs.length - 1];
             const pill = document.getElementById('todayStatusPill');
             const inEl = document.getElementById('todayInDisplay');
             const outEl = document.getElementById('todayOutDisplay');
@@ -1541,11 +1560,11 @@
                 outEl.textContent = '全天';
                 timelineEl.innerHTML = `<span>今日已标记为${rec.type === 'paid_leave' ? '带薪年假/调休' : '事假/病假'}</span><button onclick="openRecordEditor('${rec.id}')" class="text-xs underline text-slate-500 cursor-pointer">修改</button>`;
             } else if (rec.startTime && !rec.endTime) {
-                pill.textContent = todayRecs.length > 1 ? `第${todayRecs.length}班次中` : '工作中';
+                pill.textContent = rec.date < today ? '夜班进行中' : (todayRecs.length > 1 ? `第${todayRecs.length}班次中` : '工作中');
                 pill.className = 'text-xs font-semibold px-3 py-1.5 rounded-full bg-brand-50 text-brand-700 shrink-0';
                 inEl.textContent = rec.startTime;
                 outEl.textContent = '待下班';
-                timelineEl.innerHTML = `<span class="text-brand-600 font-medium">已于 ${rec.startTime} 上班，进行中...</span><button onclick="openRecordEditor('${rec.id}')" class="text-xs underline text-slate-500 cursor-pointer">修改时间</button>`;
+                timelineEl.innerHTML = `<span class="text-brand-600 font-medium">${rec.date < today ? `${rec.date} ` : ''}已于 ${rec.startTime} 上班，进行中...</span><button onclick="openRecordEditor('${rec.id}')" class="text-xs underline text-slate-500 cursor-pointer">修改时间</button>`;
             } else {
                 let totalH = 0, totalOt = 0, totalPay = 0;
                 todayRecs.forEach(r => {
@@ -2185,6 +2204,7 @@
             document.getElementById('dataCenterModal').classList.remove('hidden');
             document.getElementById('importPreviewBox').classList.add('hidden');
             pendingImportRows = [];
+            pendingImportConfig = null;
             updateBackupStatusBanner();
             updateCloudSyncUI();
             const targetTab = ['sync', 'file', 'paste', 'token', 'export'].includes(tab) ? tab : 'file';
@@ -2312,10 +2332,7 @@
                     try {
                         const obj = JSON.parse(ev.target.result);
                         const list = Array.isArray(obj) ? obj : (obj.records || []);
-                        if (obj.config) {
-                            appState.config = { ...appState.config, ...obj.config };
-                            syncRuleInputs();
-                        }
+                        pendingImportConfig = obj.config && typeof obj.config === 'object' && !Array.isArray(obj.config) ? obj.config : null;
                         normalizeAndPreviewRows(list);
                     } catch (err) {
                         showToast('JSON 备份文件格式解析失败', 'error');
@@ -2457,19 +2474,30 @@
             saveSnapshotForUndo();
 
             const strategy = document.querySelector('input[name="importStrategy"]:checked').value;
+            const importDates = new Set(pendingImportRows.map(r => r.date));
             if (strategy === 'replace') {
-                const targetMonths = new Set(pendingImportRows.map(r => getCycleMonthForDate(r.date, appState.config.cycleStartDay)));
-                appState.records = appState.records.filter(r => !targetMonths.has(getCycleMonthForDate(r.date, appState.config.cycleStartDay)));
+                // 仅替换本次导入涉及的日期，不删除整个计薪周期内的其他记录。
+                appState.records = appState.records.filter(r => !importDates.has(r.date));
             }
 
+            // 合并模式保留同日多班次；仅跳过字段完全相同的记录，避免重复导入产生重复项。
+            let addedCount = 0, skippedCount = 0;
             pendingImportRows.forEach(newRec => {
-                const existIdx = appState.records.findIndex(r => r.date === newRec.date);
-                if (existIdx !== -1) {
-                    appState.records[existIdx] = newRec;
-                } else {
-                    appState.records.push(newRec);
-                }
+                const duplicate = appState.records.some(r =>
+                    r.date === newRec.date && (r.startTime || '') === (newRec.startTime || '') &&
+                    (r.endTime || '') === (newRec.endTime || '') && r.type === newRec.type &&
+                    (r.note || '') === (newRec.note || '')
+                );
+                if (duplicate) { skippedCount++; return; }
+                appState.records.push(newRec);
+                addedCount++;
             });
+
+            if (pendingImportConfig) {
+                appState.config = { ...appState.config, ...pendingImportConfig };
+                syncRuleInputs();
+                pendingImportConfig = null;
+            }
 
             const latestDate = pendingImportRows.map(r => r.date).sort().pop();
             if (latestDate) {
@@ -2479,10 +2507,11 @@
 
             const importedCount = pendingImportRows.length;
             pendingImportRows = [];
+            pendingImportConfig = null;
             closeDataModal();
             saveState();
             renderAll();
-            showToast(`成功导入 ${importedCount} 条考勤记录！`, 'success', true);
+            showToast(`导入完成：新增 ${addedCount} 条${skippedCount ? `，跳过重复 ${skippedCount} 条` : ''}（解析 ${importedCount} 条）`, 'success', true);
         }
 
         function downloadImportTemplate() {
