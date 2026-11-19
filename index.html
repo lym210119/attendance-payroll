@@ -973,6 +973,7 @@
         let undoSnapshot = null;     // 用于“撤销”操作的快照
         let pendingImportRows = [];  // 待确认导入的解析记录
         let pendingImportConfig = null; // JSON 配置暂存，确认导入前不修改当前设置
+        let importRequestId = 0; // 忽略已取消或过期的异步文件读取结果
         let cloudSyncTimer = null;
         let storageWriteBlocked = false; // 检测到本地数据损坏时禁止自动覆盖原始数据
 
@@ -2313,7 +2314,8 @@
         }
 
         function closeDataModal() {
-            // 关闭数据中心即取消尚未确认的导入，避免下次打开时误提交旧预览。
+            // 关闭数据中心即取消尚未确认的导入，并使未完成的 FileReader 结果失效。
+            importRequestId++;
             pendingImportRows = [];
             pendingImportConfig = null;
             document.getElementById('importPreviewBox').classList.add('hidden');
@@ -2437,7 +2439,8 @@
         }
 
         function processUploadedFile(file) {
-            // 每次选择新文件都丢弃上一次尚未确认的预览，防止解析失败后误提交旧数据。
+            // 每次选择新文件都丢弃上一次尚未确认的预览，并使旧 FileReader 结果失效。
+            const requestId = ++importRequestId;
             pendingImportRows = [];
             pendingImportConfig = null;
             document.getElementById('importPreviewBox').classList.add('hidden');
@@ -2445,6 +2448,7 @@
             if (name.endsWith('.json')) {
                 const reader = new FileReader();
                 reader.onload = ev => {
+                    if (requestId !== importRequestId) return;
                     try {
                         const obj = JSON.parse(ev.target.result);
                         const list = Array.isArray(obj) ? obj : (obj.records || []);
@@ -2458,6 +2462,7 @@
             } else {
                 const reader = new FileReader();
                 reader.onload = ev => {
+                    if (requestId !== importRequestId) return;
                     try {
                         const wb = XLSX.read(ev.target.result, { type: 'array' });
                         const targetSheetName = wb.SheetNames.find(s => s.includes('明细')) || wb.SheetNames[0];
