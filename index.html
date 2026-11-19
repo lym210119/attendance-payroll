@@ -2234,6 +2234,10 @@
         }
 
         function closeDataModal() {
+            // 关闭数据中心即取消尚未确认的导入，避免下次打开时误提交旧预览。
+            pendingImportRows = [];
+            pendingImportConfig = null;
+            document.getElementById('importPreviewBox').classList.add('hidden');
             document.getElementById('dataCenterModal').classList.add('hidden');
         }
 
@@ -2347,6 +2351,10 @@
         }
 
         function processUploadedFile(file) {
+            // 每次选择新文件都丢弃上一次尚未确认的预览，防止解析失败后误提交旧数据。
+            pendingImportRows = [];
+            pendingImportConfig = null;
+            document.getElementById('importPreviewBox').classList.add('hidden');
             const name = file.name.toLowerCase();
             if (name.endsWith('.json')) {
                 const reader = new FileReader();
