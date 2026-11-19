@@ -1061,6 +1061,53 @@
             }[ch]));
         }
 
+        function normalizeConfig(raw, base = appState.config) {
+            const next = { ...base };
+            if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return next;
+
+            if (raw.payMode === 'hourly' || raw.payMode === 'monthly') {
+                next.payMode = raw.payMode;
+            }
+
+            const numericRules = {
+                hourlyRate: [0, 10000000],
+                monthlySalary: [0, 100000000],
+                stdHours: [0.5, 24],
+                lunchHours: [0, 12],
+                weekdayMult: [1, 10],
+                weekendMult: [1, 10],
+                holidayMult: [1, 10],
+                bonus: [0, 100000000],
+                deduction: [0, 100000000]
+            };
+            Object.entries(numericRules).forEach(([key, [min, max]]) => {
+                if (!Object.prototype.hasOwnProperty.call(raw, key)) return;
+                const value = Number(raw[key]);
+                if (Number.isFinite(value) && value >= min && value <= max) {
+                    next[key] = value;
+                }
+            });
+
+            if (Number.isInteger(Number(raw.cycleStartDay)) &&
+                Number(raw.cycleStartDay) >= 1 && Number(raw.cycleStartDay) <= 28) {
+                next.cycleStartDay = Number(raw.cycleStartDay);
+            }
+            if (typeof raw.strictFullAttend === 'boolean') next.strictFullAttend = raw.strictFullAttend;
+            if (typeof raw.cloudAutoSync === 'boolean') next.cloudAutoSync = raw.cloudAutoSync;
+
+            ['cloudRoomId', 'empName', 'empDept'].forEach(key => {
+                if (typeof raw[key] === 'string') next[key] = raw[key].slice(0, key === 'cloudRoomId' ? 128 : 100);
+            });
+            ['lastBackupAt', 'lastCloudSyncAt'].forEach(key => {
+                if (raw[key] === null) next[key] = null;
+                else {
+                    const value = Number(raw[key]);
+                    if (Number.isFinite(value) && value > 0) next[key] = value;
+                }
+            });
+            return next;
+        }
+
         function startClock() {
             const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
             const update = () => {
@@ -1138,7 +1185,7 @@
                     throw new Error('本地数据结构不完整');
                 }
                 if (parsed.config && typeof parsed.config === 'object' && !Array.isArray(parsed.config)) {
-                    appState.config = { ...appState.config, ...parsed.config };
+                    appState.config = normalizeConfig(parsed.config, appState.config);
                 }
                 appState.records = parsed.records;
                 if (parsed.updatedAt) appState.updatedAt = parsed.updatedAt;
@@ -2187,7 +2234,7 @@
                     saveSnapshotForUndo();
                     if (remote.config) {
                         const keepAuto = appState.config.cloudAutoSync;
-                        appState.config = { ...appState.config, ...remote.config, cloudRoomId: roomId, cloudAutoSync: keepAuto };
+                        appState.config = { ...normalizeConfig(remote.config, appState.config), cloudRoomId: roomId, cloudAutoSync: keepAuto };
                         syncRuleInputs();
                     }
                     appState.records = remote.records;
@@ -2511,7 +2558,7 @@
             });
 
             if (pendingImportConfig) {
-                appState.config = { ...appState.config, ...pendingImportConfig };
+                appState.config = normalizeConfig(pendingImportConfig, appState.config);
                 syncRuleInputs();
                 pendingImportConfig = null;
             }
