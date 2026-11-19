@@ -1358,10 +1358,12 @@
 
             const todayRecs = appState.records.filter(r => r.date === today);
             const yesterday = getYesterdayStr();
+            // 只把未下班的记录视为进行中班次；不能回退到已完成记录，
+            // 否则重复点击“下班打卡”会覆盖上一班次的真实下班时间。
             const activeRec = appState.records
                 .filter(r => r.date >= yesterday && r.date <= today && r.startTime && !r.endTime)
                 .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`))
-                .pop() || todayRecs[todayRecs.length - 1];
+                .pop();
 
             if (action === 'in') {
                 if (activeRec && !activeRec.endTime) {
