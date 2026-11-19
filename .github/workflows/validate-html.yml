@@ -1,0 +1,85 @@
+name: Validate attendance page
+
+on:
+  pull_request:
+    paths:
+      - "index.html"
+      - ".github/workflows/validate-html.yml"
+      - "tests/payroll.test.cjs"
+      - "tests/browser-smoke.cjs"
+  workflow_dispatch:
+
+jobs:
+  syntax-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check inline JavaScript syntax
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import subprocess
+          import tempfile
+
+          class ScriptExtractor(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.scripts = []
+                  self.current = None
+
+              def handle_starttag(self, tag, attrs):
+                  if tag.lower() == "script":
+                      attrs = dict(attrs)
+                      self.current = [] if not attrs.get("src") else None
+
+              def handle_data(self, data):
+                  if self.current is not None:
+                      self.current.append(data)
+
+              def handle_endtag(self, tag):
+                  if tag.lower() == "script" and self.current is not None:
+                      self.scripts.append("".join(self.current))
+                      self.current = None
+
+          parser = ScriptExtractor()
+          parser.feed(Path("index.html").read_text(encoding="utf-8"))
+          if not parser.scripts:
+              raise SystemExit("No inline JavaScript blocks found")
+
+          for index, source in enumerate(parser.scripts, 1):
+              with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8") as file:
+                  file.write(source)
+                  file.flush()
+                  subprocess.run(["node", "--check", file.name], check=True)
+              print(f"Inline script {index}: syntax OK")
+
+          print(f"Validated {len(parser.scripts)} inline JavaScript blocks.")
+          PY
+
+      - name: Run payroll calculation regression tests
+        run: node --test tests/payroll.test.cjs
+
+      - name: Install Playwright and Chromium
+        run: |
+          npm init -y
+          npm install --no-save --no-audit --no-fund playwright
+          npx playwright install chromium
+
+      - name: Run browser smoke tests
+        shell: bash
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/attendance-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for attempt in {1..20}; do
+            if curl --silent --fail http://127.0.0.1:4173/ > /dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          node tests/browser-smoke.cjs
