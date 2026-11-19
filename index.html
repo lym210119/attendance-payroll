@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="牛马打卡">
@@ -91,174 +91,6 @@
                 padding: 20px !important;
             }
             .no-print { display: none !important; }
-        }
-        /* 移动端与平板布局增强：避免窄屏导航溢出、弹窗被安全区域/键盘挤压 */
-        @media (max-width: 420px) {
-            header .max-w-7xl {
-                display: grid !important;
-                grid-template-columns: minmax(0, 1fr) auto;
-                grid-template-rows: auto auto;
-                height: auto !important;
-                min-height: 3.5rem;
-                padding-top: 0.5rem;
-                padding-bottom: 0.5rem;
-                gap: 0.5rem;
-            }
-            header .max-w-7xl > :nth-child(2) {
-                grid-column: 1 / -1;
-                justify-self: center;
-                grid-row: 2;
-            }
-            header .max-w-7xl > :nth-child(3) {
-                grid-column: 2;
-                grid-row: 1;
-                gap: 0.375rem;
-            }
-            header #headerSyncBtn,
-            header .max-w-7xl > :nth-child(3) > button {
-                min-height: 2.5rem;
-            }
-            header .max-w-7xl > :nth-child(3) > button {
-                padding-left: 0.5rem;
-                padding-right: 0.5rem;
-            }
-            header .max-w-7xl > :nth-child(3) > button span {
-                white-space: nowrap;
-            }
-            main {
-                padding-left: 0.75rem !important;
-                padding-right: 0.75rem !important;
-                padding-top: 0.75rem !important;
-            }
-            .mobile-section {
-                padding: 1rem !important;
-            }
-            #sec-punch > div:first-child {
-                flex-wrap: wrap;
-            }
-            #liveEarningsLabel,
-            #offWorkCountdownLabel {
-                min-width: 0;
-                max-width: 68%;
-            }
-            #offWorkCountdownRow {
-                flex-wrap: wrap;
-                row-gap: 0.375rem;
-            }
-            #todayDurationTimeline {
-                flex-wrap: wrap;
-                row-gap: 0.375rem;
-            }
-            #sec-payroll .grid.grid-cols-2 > div,
-            #sec-payroll .grid.grid-cols-2 > div span {
-                min-width: 0;
-            }
-            #sec-payroll .col-span-2 {
-                flex-wrap: wrap;
-                row-gap: 0.375rem;
-            }
-            #sec-payroll [id^="val"] {
-                overflow-wrap: anywhere;
-            }
-            #recordsListWrapper > div {
-                align-items: flex-start;
-                gap: 0.5rem;
-            }
-            #recordsListWrapper > div > div:first-child {
-                min-width: 0;
-                flex: 1 1 auto;
-            }
-            #recordsListWrapper > div > div:first-child > div:last-child {
-                overflow-wrap: anywhere;
-                white-space: normal;
-                line-height: 1.5;
-            }
-            #recordsListWrapper > div > div:last-child {
-                flex-shrink: 0;
-            }
-            #calendarGridBody {
-                gap: 0.25rem !important;
-            }
-            #calendarGridBody > button,
-            #calendarGridBody > div {
-                min-width: 0;
-                overflow: hidden;
-            }
-            #calendarGridBody > button {
-                padding-left: 0.125rem !important;
-                padding-right: 0.125rem !important;
-            }
-            #calendarGridBody > button span,
-            #calendarGridBody > button div {
-                max-width: 100%;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-            #recordEditorModal,
-            #dataCenterModal,
-            #payslipModal {
-                align-items: flex-end;
-                padding: 0 !important;
-            }
-            #recordEditorModal > div,
-            #dataCenterModal > div {
-                width: 100%;
-                max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 0.25rem) !important;
-                border-radius: 1.25rem 1.25rem 0 0;
-                padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.25rem) !important;
-            }
-            #recordEditorModal form,
-            #dataCenterModal > div > div.overflow-y-auto {
-                overscroll-behavior: contain;
-                -webkit-overflow-scrolling: touch;
-            }
-            #dataCenterModal > div > div:first-child {
-                gap: 0.5rem;
-                align-items: flex-start;
-            }
-            #dataCenterModal h3 {
-                font-size: 0.9375rem;
-                line-height: 1.35;
-            }
-            #dataCenterModal p {
-                line-height: 1.45;
-            }
-            #payslipModal {
-                padding: 0.5rem !important;
-            }
-            #payslipPrintArea {
-                max-height: calc(100dvh - 1rem - env(safe-area-inset-bottom, 0px));
-                border-radius: 1rem;
-            }
-            #payslipPrintArea > div.overflow-y-auto {
-                overscroll-behavior: contain;
-                -webkit-overflow-scrolling: touch;
-            }
-            #toastContainer {
-                top: calc(env(safe-area-inset-top, 0px) + 0.5rem) !important;
-            }
-        }
-        /* iOS 输入控件字号至少 16px，避免聚焦时 Safari 自动缩放 */
-        @supports (-webkit-touch-callout: none) {
-            input:not([type="checkbox"]):not([type="radio"]),
-            select,
-            textarea {
-                font-size: 16px !important;
-            }
-        }
-        /* 小屏触控可用性：提升关键操作触控面积 */
-        @media (max-width: 767px) {
-            button,
-            [role="button"] {
-                touch-action: manipulation;
-            }
-            #recordEditorModal button,
-            #dataCenterModal button {
-                min-height: 2.75rem;
-            }
-            nav.md\\:hidden button {
-                min-height: 3.5rem;
-            }
         }
     </style>
 </head>
@@ -762,15 +594,6 @@
                             <option value="unpaid_leave">事假 / 病假 (0薪)</option>
                         </select>
                     </div>
-                </div>
-
-                <div id="editorShiftRow" class="space-y-1.5">
-                    <label class="block text-xs font-semibold text-slate-600">固定班次（用于新规则试算）</label>
-                    <select id="editRecShiftType" class="w-full px-3 py-2.5 text-sm font-semibold bg-slate-50 border border-slate-200 rounded-xl focus:border-brand-500 focus:bg-white outline-none">
-                        <option value="day">白班 08:00–20:00</option>
-                        <option value="night">夜班 20:00–次日08:00</option>
-                    </select>
-                    <p id="editorShiftHint" class="text-[11px] text-slate-400">旧记录按打卡时间自动推断；可在此手动修正。仅影响新规则试算，不改变当前实际工资。</p>
                 </div>
 
                 <div id="editorTimeRow" class="grid grid-cols-2 gap-3 transition-opacity">
@@ -1551,129 +1374,14 @@
         /**
          * 单日考勤工时与薪资精确核算 (支持跨天夜班 + 请假/调休类型)
          */
-        /**
-         * 独立的计薪边界分析（暂不接入薪资金额，避免改变既有工资结果）。
-         * 班次边界：白班 08:00-20:00；夜班 20:00-次日08:00。
-         * 实际打卡保留原值；提前到岗不增加边界内工时，延后离岗单独标记候选加班。
-         * 休息时段未记录具体起止，因此此处只扣固定休息估算值，不作为最终工资依据。
-         */
-        function inferShiftType(startTime) {
-            if (typeof startTime !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) return 'day';
-            const [hour, minute] = startTime.split(':').map(Number);
-            const clock = hour * 60 + minute;
-            return clock >= 19 * 60 || clock < 5 * 60 ? 'night' : 'day';
-        }
-
-        function calcShiftBoundary(rec, options = {}) {
-            const breakMinutes = Number.isFinite(options.breakMinutes) ? Math.max(0, options.breakMinutes) : 90;
-            const standardHours = Number.isFinite(options.standardHours) ? Math.max(0, options.standardHours) : 8;
-            const empty = {
-                complete: false, applicable: false, reason: '', shiftType: null,
-                scheduledStart: null, scheduledEnd: null, actualStart: null, actualEnd: null,
-                earlyArrivalMinutes: 0, lateArrivalMinutes: 0, earlyLeaveMinutes: 0,
-                withinShiftMinutes: 0, preShiftMinutes: 0, postShiftMinutes: 0,
-                breakMinutes, estimatedNetHours: 0, estimatedRegularHours: 0,
-                estimatedShiftOvertimeHours: 0, postShiftOvertimeCandidateHours: 0,
-                note: '边界分析仅供核对；未接入工资金额计算。'
-            };
-            if (!rec || rec.type === 'paid_leave' || rec.type === 'unpaid_leave') {
-                return { ...empty, complete: true, applicable: false, reason: '请假记录不适用固定班次边界' };
-            }
-            const validTime = value => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
-            if (!rec.date || !/^\d{4}-\d{2}-\d{2}$/.test(rec.date) || !validTime(rec.startTime) || !validTime(rec.endTime)) {
-                return { ...empty, reason: '日期或打卡时间格式无效' };
-            }
-            const [sh, sm] = rec.startTime.split(':').map(Number);
-            const [eh, em] = rec.endTime.split(':').map(Number);
-            const startClock = sh * 60 + sm;
-            const endClock = eh * 60 + em;
-            const shiftType = rec.shiftType === 'day' || rec.shiftType === 'night' ? rec.shiftType : inferShiftType(rec.startTime);
-            const shiftStartClock = shiftType === 'night' ? 20 * 60 : 8 * 60;
-            const shiftEndClock = shiftType === 'night' ? 8 * 60 : 20 * 60;
-            const [year, month, day] = rec.date.split('-').map(Number);
-            const baseDate = new Date(year, month - 1, day);
-            if (Number.isNaN(baseDate.getTime()) || baseDate.getFullYear() !== year || baseDate.getMonth() !== month - 1 || baseDate.getDate() !== day) {
-                return { ...empty, reason: '日期无法解析' };
-            }
-            const dayMs = 24 * 60 * 60 * 1000;
-            const dateKey = date => {
-                const d = new Date(date);
-                return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-            };
-            const scheduledStart = new Date(baseDate.getTime() + shiftStartClock * 60000);
-            const scheduledEnd = new Date(baseDate.getTime() + (shiftType === 'night' ? dayMs + shiftEndClock * 60000 : shiftEndClock * 60000));
-            const actualStart = new Date(baseDate.getTime() + startClock * 60000);
-            let actualEnd = new Date(baseDate.getTime() + endClock * 60000);
-            if (actualEnd <= actualStart) actualEnd = new Date(actualEnd.getTime() + dayMs);
-            const overlapStart = Math.max(actualStart.getTime(), scheduledStart.getTime());
-            const overlapEnd = Math.min(actualEnd.getTime(), scheduledEnd.getTime());
-            const withinShiftMinutes = Math.max(0, (overlapEnd - overlapStart) / 60000);
-            const preShiftMinutes = Math.max(0, (scheduledStart.getTime() - actualStart.getTime()) / 60000);
-            const postShiftMinutes = Math.max(0, (actualEnd.getTime() - scheduledEnd.getTime()) / 60000);
-            const earlyArrivalMinutes = Math.max(0, (scheduledStart.getTime() - actualStart.getTime()) / 60000);
-            const lateArrivalMinutes = Math.max(0, (actualStart.getTime() - scheduledStart.getTime()) / 60000);
-            const earlyLeaveMinutes = Math.max(0, (scheduledEnd.getTime() - actualEnd.getTime()) / 60000);
-            const estimatedNetHours = Math.max(0, (withinShiftMinutes - Math.min(breakMinutes, withinShiftMinutes)) / 60);
-            const estimatedRegularHours = Math.min(standardHours, estimatedNetHours);
-            const estimatedShiftOvertimeHours = Math.max(0, estimatedNetHours - standardHours);
-            return {
-                complete: true, applicable: true, reason: '', shiftType,
-                scheduledStart: dateKey(scheduledStart) + ' ' + String(Math.floor(shiftStartClock / 60)).padStart(2, '0') + ':' + String(shiftStartClock % 60).padStart(2, '0'),
-                scheduledEnd: dateKey(scheduledEnd) + ' ' + String(Math.floor(shiftEndClock / 60)).padStart(2, '0') + ':' + String(shiftEndClock % 60).padStart(2, '0'),
-                actualStart: rec.date + ' ' + rec.startTime,
-                actualEnd: dateKey(actualEnd) + ' ' + rec.endTime,
-                earlyArrivalMinutes, lateArrivalMinutes, earlyLeaveMinutes,
-                withinShiftMinutes, preShiftMinutes, postShiftMinutes,
-                breakMinutes: Math.min(breakMinutes, withinShiftMinutes),
-                estimatedNetHours, estimatedRegularHours, estimatedShiftOvertimeHours,
-                postShiftOvertimeCandidateHours: postShiftMinutes / 60,
-                note: '边界分析仅供核对；休息时间按固定扣除估算，延后离岗为加班候选，暂不影响工资。'
-            };
-        }
-
-        /**
-         * 固定班次边界计薪试算：仅生成对照结果，不替换现有工资金额。
-         * 班内净工时扣除固定休息 90 分钟；班后延时作为候选加班计入。
-         */
-        function calcBoundaryPayroll(rec, options = {}) {
-            const boundary = calcShiftBoundary(rec, { breakMinutes: 90, standardHours: 8 });
-            const empty = {
-                complete: false, isLeave: false, netHours: 0, regHours: 0, otHours: 0,
-                regPay: 0, otWeekdayPay: 0, otWeekendPay: 0, otHolidayPay: 0,
-                totalPay: 0, boundary, reason: boundary.reason || '计薪边界无法计算'
-            };
-            if (!boundary.complete || !boundary.applicable) return empty;
-            const rate = getEffectiveHourlyRate();
-            const paidHours = boundary.estimatedNetHours + boundary.postShiftOvertimeCandidateHours;
-            const standardHours = 8;
-            let regHours = 0, otHours = 0, regPay = 0, otWeekdayPay = 0, otWeekendPay = 0, otHolidayPay = 0;
-            if (rec.type === 'weekend') {
-                otHours = paidHours;
-                otWeekendPay = otHours * rate * appState.config.weekendMult;
-            } else if (rec.type === 'holiday') {
-                otHours = paidHours;
-                otHolidayPay = otHours * rate * appState.config.holidayMult;
-            } else {
-                regHours = Math.min(standardHours, paidHours);
-                otHours = Math.max(0, paidHours - standardHours);
-                regPay = regHours * rate;
-                otWeekdayPay = otHours * rate * appState.config.weekdayMult;
-            }
-            return {
-                complete: true, isLeave: false, netHours: paidHours, regHours, otHours,
-                regPay, otWeekdayPay, otWeekendPay, otHolidayPay,
-                totalPay: regPay + otWeekdayPay + otWeekendPay + otHolidayPay,
-                boundary, reason: ''
-            };
-        }
-
         function calcRecord(rec) {
             const c = appState.config;
             const rate = getEffectiveHourlyRate();
 
             if (rec.type === 'paid_leave') {
                 const regHours = c.stdHours;
-                const regPay = regHours * rate;
+                // 月薪模式的基本工资由周期汇总统一计算，避免按请假记录重复计薪。
+                const regPay = c.payMode === 'monthly' ? 0 : regHours * rate;
                 return {
                     complete: true, isCrossDay: false, isLeave: true,
                     netHours: regHours, regHours, otHours: 0,
@@ -1722,7 +1430,7 @@
             } else {
                 regHours = Math.min(netHours, c.stdHours);
                 otHours = Math.max(0, netHours - c.stdHours);
-                regPay = regHours * rate;
+                regPay = c.payMode === 'monthly' ? 0 : regHours * rate;
                 otWeekdayPay = otHours * rate * c.weekdayMult;
             }
 
@@ -1994,9 +1702,6 @@
                 document.getElementById('editRecStart').value = rec.startTime || '09:00';
                 document.getElementById('editRecEnd').value = rec.endTime || '';
                 document.getElementById('editRecNote').value = rec.note || '';
-                const inferredShift = inferShiftType(rec.startTime);
-                document.getElementById('editRecShiftType').value = rec.shiftType === 'night' || rec.shiftType === 'day' ? rec.shiftType : inferredShift;
-                document.getElementById('editorShiftHint').textContent = rec.shiftType ? '已保存手动班次；修改后会更新新规则试算，不改变旧规则实际工资。' : `旧记录暂按${inferredShift === 'night' ? '夜班' : '白班'}推断，尚未手动确认；可在此修正。`;
                 delBtn.classList.remove('hidden');
                 if (sameDayBox) sameDayBox.classList.add('hidden');
                 checkHolidayBanner(rec.date, rec.type);
@@ -2009,8 +1714,6 @@
                 document.getElementById('editRecStart').value = '09:00';
                 document.getElementById('editRecEnd').value = '18:30';
                 document.getElementById('editRecNote').value = '';
-                document.getElementById('editRecShiftType').value = 'day';
-                document.getElementById('editorShiftHint').textContent = '新记录默认白班；如为夜班，请手动选择。班次只影响新规则试算。';
                 delBtn.classList.add('hidden');
                 updateSameDayBoxVisibility(targetDate);
             }
@@ -2101,12 +1804,11 @@
             const startTime = isLeave ? '' : document.getElementById('editRecStart').value;
             const endTime = isLeave ? '' : document.getElementById('editRecEnd').value;
             const note = document.getElementById('editRecNote').value.trim();
-            const shiftType = document.getElementById('editRecShiftType').value === 'night' ? 'night' : 'day';
 
             if (id) {
                 const idx = appState.records.findIndex(r => r.id === id);
                 if (idx !== -1) {
-                    appState.records[idx] = { ...appState.records[idx], date, type, startTime, endTime, shiftType, note };
+                    appState.records[idx] = { ...appState.records[idx], date, type, startTime, endTime, note };
                 }
                 showToast('考勤记录已更新', 'success', true);
             } else {
@@ -2115,12 +1817,12 @@
                 const sameDayAction = sameDayActionEl ? sameDayActionEl.value : 'append';
 
                 if (existIdx !== -1 && sameDayAction === 'overwrite') {
-                    appState.records[existIdx] = { ...appState.records[existIdx], type, startTime, endTime, shiftType, note };
+                    appState.records[existIdx] = { ...appState.records[existIdx], type, startTime, endTime, note };
                     showToast(`已覆盖更新 ${date} 的记录`, 'success', true);
                 } else {
                     appState.records.push({
                         id: 'id_' + Date.now() + Math.random().toString(36).slice(2, 5),
-                        date, type, startTime, endTime, shiftType, note
+                        date, type, startTime, endTime, note
                     });
                     showToast(existIdx !== -1 ? `已追加 ${date} 同日新班次` : `已添加 ${date} 考勤记录`, 'success', true);
                 }
@@ -2221,7 +1923,10 @@
             const fullAttendVoided = c.strictFullAttend && hasUnpaidOrIncomplete && c.bonus > 0;
             const appliedBonus = attendDays > 0 && !fullAttendVoided ? c.bonus : 0;
             const appliedDeduct = attendDays > 0 ? c.deduction : 0;
-            const grossPay = regPay + otWeekdayPay + otWeekendPay + otHolidayPay + appliedBonus;
+            // 月薪模式：基本工资按整个计薪周期固定计入，不依赖是否存在打卡记录。
+            const baseSalary = c.payMode === 'monthly' ? Math.max(0, Number(c.monthlySalary) || 0) : 0;
+            const displayedRegPay = baseSalary + regPay;
+            const grossPay = baseSalary + regPay + otWeekdayPay + otWeekendPay + otHolidayPay + appliedBonus;
             const netPay = Math.max(0, grossPay - appliedDeduct);
 
             document.getElementById('valNetPay').textContent = netPay.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -2233,7 +1938,7 @@
             document.getElementById('valOtWeekendH').textContent = otWeekendH.toFixed(1);
             document.getElementById('valOtHolidayH').textContent = otHolidayH.toFixed(1);
 
-            document.getElementById('valRegPay').textContent = `¥${regPay.toFixed(2)}`;
+            document.getElementById('valRegPay').textContent = `¥${displayedRegPay.toFixed(2)}`;
             document.getElementById('valOtWeekdayPay').textContent = `+¥${otWeekdayPay.toFixed(2)}`;
             document.getElementById('valOtSpecialPay').textContent = `+¥${(otWeekendPay + otHolidayPay).toFixed(2)}`;
             document.getElementById('valBonusLabel').textContent = fullAttendVoided ? '全勤补贴(缺勤取消)' : '全勤/固定补贴';
@@ -2250,7 +1955,7 @@
                 : `月薪固定计入基本工资 ¥${c.monthlySalary}；加班参考时薪 ¥${rate.toFixed(2)}/h (按21.75天折算)`;
             document.getElementById('slipAttendDays').textContent = `${attendDays} 天`;
             document.getElementById('slipHoursSplit').textContent = `${regHours.toFixed(1)}h 正常 / ${otHours.toFixed(1)}h 加班`;
-            document.getElementById('slipRegPay').textContent = `¥${regPay.toFixed(2)}`;
+            document.getElementById('slipRegPay').textContent = `¥${displayedRegPay.toFixed(2)}`;
             document.getElementById('slipOtWeekday').textContent = `+¥${otWeekdayPay.toFixed(2)}`;
             document.getElementById('slipOtSpecial').textContent = `+¥${(otWeekendPay + otHolidayPay).toFixed(2)}`;
             document.getElementById('slipBonusLabel').textContent = fullAttendVoided ? '全勤奖 (因请假/缺卡取消)' : '全勤奖 / 固定补贴';
@@ -2312,16 +2017,7 @@
                 const subMeta = m.isLeave
                     ? (rec.type === 'paid_leave' ? `折算标准工时 ${m.regHours.toFixed(1)}h` : '缺勤不计薪')
                     : (m.complete ? `净工时 ${m.netHours.toFixed(1)}h` : '<span class="text-amber-600 font-medium">打卡时间不完整或无效，点击修正</span>');
-                const boundary = m.complete && !m.isLeave ? calcShiftBoundary(rec) : null;
-                const boundaryPay = m.complete && !m.isLeave ? calcBoundaryPayroll(rec) : null;
-                const boundaryMeta = boundary && boundary.applicable && boundary.complete
-                    ? `班次边界：${boundary.shiftType === 'night' ? '夜班' : '白班'}（${rec.shiftType ? '手动' : '自动推断'}） · 边界内净工时估算 ${boundary.estimatedNetHours.toFixed(1)}h · 班内加班估算 ${boundary.estimatedShiftOvertimeHours.toFixed(1)}h${boundary.earlyArrivalMinutes > 0 ? ` · 提前到岗 ${(boundary.earlyArrivalMinutes / 60).toFixed(1)}h（不计）` : ''}${boundary.lateArrivalMinutes > 0 ? ` · 迟到 ${(boundary.lateArrivalMinutes / 60).toFixed(1)}h` : ''}${boundary.earlyLeaveMinutes > 0 ? ` · 提前离岗 ${(boundary.earlyLeaveMinutes / 60).toFixed(1)}h` : ''}${boundary.postShiftOvertimeCandidateHours > 0 ? ` · 班后加班候选 ${boundary.postShiftOvertimeCandidateHours.toFixed(1)}h` : ''}`
-                    : '';
 
-                const boundaryPayMeta = boundaryPay && boundaryPay.complete
-                    ? '新规则试算 ¥' + boundaryPay.totalPay.toFixed(2) + '（旧规则 ¥' + m.totalPay.toFixed(2) + '，差额 ' + (boundaryPay.totalPay - m.totalPay >= 0 ? '+' : '') + (boundaryPay.totalPay - m.totalPay).toFixed(2) + '；不影响实际工资）'
-                    : '';
-                const boundaryDisplay = boundaryMeta && boundaryPayMeta ? boundaryMeta + ' · ' + boundaryPayMeta : boundaryMeta;
                 row.innerHTML = `
                     <div class="flex items-center gap-3 min-w-0">
                         <div class="w-11 h-11 rounded-xl bg-slate-100 group-hover:bg-white border border-slate-200/70 flex flex-col items-center justify-center shrink-0 tabular-nums">
@@ -2335,7 +2031,6 @@
                             </div>
                             <div class="text-xs text-slate-400 truncate mt-0.5">
                                 ${subMeta}
-                                ${boundaryDisplay ? `<div class="text-[11px] text-indigo-600 mt-1">${boundaryDisplay}</div>` : ''}
                                 ${m.otHours > 0 ? ` · <span class="text-amber-600 font-semibold">加班 +${m.otHours.toFixed(1)}h</span>` : ''}
                                 ${rec.note ? ` · ${escapeHtml(rec.note)}` : ''}
                             </div>
@@ -2807,8 +2502,7 @@
                 const rawDate = item['日期'] || item['考勤日期'] || item['Date'] || item['date'] || '';
                 const rawStart = item['上班时间'] || item['上班'] || item['Clock In'] || item['startTime'] || '';
                 const rawEnd = item['下班时间'] || item['下班'] || item['Clock Out'] || item['endTime'] || '';
-                const rawType = String(item['班次类型'] || item['日薪类型'] || item['类型'] || item['Type'] || item['type'] || '');
-                const rawShiftType = String(item['固定班次'] || item['班别'] || item['shiftType'] || item['Shift'] || '');
+                const rawType = String(item['班次类型'] || item['日薪类型'] || item['类型'] || item['班次'] || item['Type'] || item['type'] || '');
                 const note = String(item['备注'] || item['Note'] || item['note'] || '').trim();
 
                 const dateStr = formatExcelDate(rawDate);
@@ -2837,7 +2531,6 @@
                     startTime: isLeave ? '' : (startStr || ''),
                     endTime: isLeave ? '' : (endStr || ''),
                     type,
-                    shiftType: /夜班|night/i.test(rawShiftType || rawType) ? 'night' : (/白班|day/i.test(rawShiftType || rawType) ? 'day' : undefined),
                     note
                 });
             });
@@ -2914,7 +2607,7 @@
             pendingImportRows.forEach(newRec => {
                 const duplicate = appState.records.some(r =>
                     r.date === newRec.date && (r.startTime || '') === (newRec.startTime || '') &&
-                    (r.endTime || '') === (newRec.endTime || '') && (r.shiftType || '') === (newRec.shiftType || '') && r.type === newRec.type &&
+                    (r.endTime || '') === (newRec.endTime || '') && r.type === newRec.type &&
                     (r.note || '') === (newRec.note || '')
                 );
                 if (duplicate) { skippedCount++; return; }
@@ -2978,7 +2671,6 @@
                     '上班时间': r.startTime || '-',
                     '下班时间': r.endTime ? `${r.endTime}${m.isCrossDay ? '(次日)' : ''}` : (m.isLeave ? '-' : '未打卡'),
                     '班次类型': typeMap[r.type] || '正常工作日',
-                    '固定班次': r.shiftType === 'night' ? '夜班' : (r.shiftType === 'day' ? '白班' : '自动推断'),
                     '净工时(小时)': Number(m.netHours.toFixed(2)),
                     '正常工时(小时)': Number(m.regHours.toFixed(2)),
                     '加班工时(小时)': Number(m.otHours.toFixed(2)),
@@ -3016,12 +2708,11 @@
                 workday: '正常工作日', weekend: '周末加班', holiday: '法定节假日',
                 paid_leave: '带薪年假/调休', unpaid_leave: '事假/病假'
             };
-            const rows = [['日期', '上班时间', '下班时间', '班次类型', '固定班次', '净工时', '加班工时', '当日薪资', '备注']];
+            const rows = [['日期', '上班时间', '下班时间', '班次类型', '净工时', '加班工时', '当日薪资', '备注']];
             monthRecords.forEach(r => {
                 const m = calcRecord(r);
                 rows.push([
                     r.date, r.startTime || '', r.endTime || '', typeMap[r.type] || '正常工作日',
-                    r.shiftType === 'night' ? '夜班' : (r.shiftType === 'day' ? '白班' : '自动推断'),
                     m.netHours.toFixed(2), m.otHours.toFixed(2), m.totalPay.toFixed(2),
                     `"${(r.note || '').replace(/"/g, '""')}"`
                 ]);
