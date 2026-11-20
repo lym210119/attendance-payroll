@@ -1325,21 +1325,24 @@
             const breakPending = breakMinutes === null;
             const appliedBreak = breakPending ? 0 : Math.min(breakMinutes, overlapMinutes);
             const shiftNetMinutes = Math.max(0, overlapMinutes - appliedBreak);
-            const regularMinutes = breakPending ? 0 : Math.min(shiftNetMinutes, Number(appState.config.stdHours || 8) * 60);
-            const inShiftOtMinutes = breakPending ? 0 : Math.max(0, shiftNetMinutes - Number(appState.config.stdHours || 8) * 60);
+            const standardMinutes = Math.max(0, Number(appState.config.stdHours || 8) * 60);
             const overtimeCandidateMinutes = Math.max(0, actualEnd - shiftEnd);
             const approval = meta.overtimeApproval || (overtimeCandidateMinutes > 0 ? 'pending' : 'none');
             const approvedMinutes = approval === 'approved'
                 ? Math.min(overtimeCandidateMinutes, Math.max(0, Number(meta.approvedOvertimeMinutes ?? overtimeCandidateMinutes)))
                 : 0;
+            const paidMinutes = breakPending ? null : shiftNetMinutes + approvedMinutes;
+            // 加班统一按每日标准计薪工时计算：计薪总工时超过标准工时的部分才算加班。
+            const regularMinutes = paidMinutes === null ? 0 : Math.min(paidMinutes, standardMinutes);
+            const overtimeMinutes = paidMinutes === null ? 0 : Math.max(0, paidMinutes - standardMinutes);
             return {
                 shift, shiftLabel: shift === 'day' ? '白班' : '夜班', fullShift,
                 shiftStart, shiftEnd, actualEnd, overlapMinutes, breakMinutes,
                 breakPending, appliedBreak, shiftNetMinutes, regularMinutes,
-                inShiftOtMinutes, overtimeCandidateMinutes, approval, approvedMinutes,
+                overtimeMinutes, overtimeCandidateMinutes, approval, approvedMinutes,
                 regularHours: regularMinutes / 60,
-                overtimeHours: (inShiftOtMinutes + approvedMinutes) / 60,
-                netHours: breakPending ? null : (shiftNetMinutes + approvedMinutes) / 60
+                overtimeHours: overtimeMinutes / 60,
+                netHours: paidMinutes === null ? null : paidMinutes / 60
             };
         }
 
@@ -1518,8 +1521,9 @@
                 otHours = netHours;
                 otHolidayPay = netHours * rate * c.holidayMult;
             } else {
-                regHours = boundary.regularHours;
-                otHours = boundary.overtimeHours;
+                // 工作日统一按每日标准工时拆分：计薪工时最多计为标准工时，其余为加班。
+                regHours = Math.min(netHours, Math.max(0, Number(c.stdHours || 8)));
+                otHours = Math.max(0, netHours - regHours);
                 regPay = regHours * rate;
                 otWeekdayPay = otHours * rate * c.weekdayMult;
             }
