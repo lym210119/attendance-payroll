@@ -1318,14 +1318,16 @@
             if (actualEnd < start) actualEnd += 24 * 60;
 
             const fullShift = start <= shiftStart && actualEnd >= shiftEnd;
+            const standardMinutes = Math.max(0, Number(appState.config.stdHours || 8) * 60);
+            // 正常白班：准时/提前到岗且17:30或之前下班，按标准8小时计薪，不要求填写休息时间。
+            const normalDayEnd = shift === 'day' && start <= shiftStart && actualEnd <= (17 * 60 + 30);
             const overlapStart = Math.max(start, shiftStart);
             const overlapEnd = Math.min(actualEnd, shiftEnd);
             const overlapMinutes = Math.max(0, overlapEnd - overlapStart);
-            const breakMinutes = fullShift ? 90 : (Number.isFinite(Number(meta.actualBreakMinutes)) && meta.actualBreakMinutes !== '' ? Math.max(0, Number(meta.actualBreakMinutes)) : null);
+            const breakMinutes = (fullShift || normalDayEnd) ? (fullShift ? 90 : 0) : (Number.isFinite(Number(meta.actualBreakMinutes)) && meta.actualBreakMinutes !== '' ? Math.max(0, Number(meta.actualBreakMinutes)) : null);
             const breakPending = breakMinutes === null;
             const appliedBreak = breakPending ? 0 : Math.min(breakMinutes, overlapMinutes);
-            const shiftNetMinutes = Math.max(0, overlapMinutes - appliedBreak);
-            const standardMinutes = Math.max(0, Number(appState.config.stdHours || 8) * 60);
+            const shiftNetMinutes = normalDayEnd ? standardMinutes : Math.max(0, overlapMinutes - appliedBreak);
             const overtimeCandidateMinutes = Math.max(0, actualEnd - shiftEnd);
             const approval = meta.overtimeApproval || (overtimeCandidateMinutes > 0 ? 'pending' : 'none');
             const approvedMinutes = approval === 'approved'
