@@ -1317,29 +1317,18 @@
             let actualEnd = endClock;
             if (actualEnd < start) actualEnd += 24 * 60;
 
-            const rawFullShift = start <= shiftStart && actualEnd >= shiftEnd;
+            const fullShift = start <= shiftStart && actualEnd >= shiftEnd;
             const standardMinutes = Math.max(0, Number(appState.config.stdHours || 8) * 60);
-            const cfg = appState.config || {};
-            const earliestCfg = boundaryMinutes(cfg.earliestPaidStart || '08:00');
-            const latestCfg = boundaryMinutes(cfg.latestPaidEnd || '20:00');
-            if (earliestCfg === null || latestCfg === null) return { incomplete: true, reason: '计薪有效时间规则设置无效' };
-            let ruleStart = earliestCfg, ruleEnd = latestCfg;
-            if (shift === 'night' && ruleEnd <= ruleStart) ruleEnd += 24 * 60;
-            if (shift === 'night' && ruleStart < 12 * 60) ruleStart += 24 * 60;
-            if (ruleEnd < ruleStart) ruleEnd += 24 * 60;
-            const alignedStart = cfg.payAlignment === 'actual' ? start : Math.max(start, shiftStart);
-            const effectiveStart = Math.max(alignedStart, ruleStart);
-            const effectiveEnd = Math.min(actualEnd, ruleEnd);
-            const fullShift = effectiveStart <= shiftStart && effectiveEnd >= shiftEnd;
-            const overlapStart = Math.max(effectiveStart, shiftStart);
-            const overlapEnd = Math.min(effectiveEnd, shiftEnd);
+            // 正常白班：准时/提前到岗且17:30或之前下班，按标准8小时计薪，不要求填写休息时间。
+            const normalDayEnd = shift === 'day' && start <= shiftStart && actualEnd <= (17 * 60 + 30);
+            const overlapStart = Math.max(start, shiftStart);
+            const overlapEnd = Math.min(actualEnd, shiftEnd);
             const overlapMinutes = Math.max(0, overlapEnd - overlapStart);
-            const normalDayEnd = shift === 'day' && start <= shiftStart && actualEnd <= (17 * 60 + 30) && effectiveStart <= shiftStart;
             const breakMinutes = (fullShift || normalDayEnd) ? (fullShift ? 90 : 0) : (Number.isFinite(Number(meta.actualBreakMinutes)) && meta.actualBreakMinutes !== '' ? Math.max(0, Number(meta.actualBreakMinutes)) : null);
-            const breakPending = breakMinutes === null && overlapMinutes > 0;
-            const appliedBreak = breakPending ? 0 : Math.min(breakMinutes || 0, overlapMinutes);
+            const breakPending = breakMinutes === null;
+            const appliedBreak = breakPending ? 0 : Math.min(breakMinutes, overlapMinutes);
             const shiftNetMinutes = normalDayEnd ? standardMinutes : Math.max(0, overlapMinutes - appliedBreak);
-            const overtimeCandidateMinutes = Math.max(0, effectiveEnd - shiftEnd);
+            const overtimeCandidateMinutes = Math.max(0, actualEnd - shiftEnd);
             const approval = meta.overtimeApproval || (overtimeCandidateMinutes > 0 ? 'pending' : 'none');
             const approvedMinutes = approval === 'approved'
                 ? Math.min(overtimeCandidateMinutes, Math.max(0, Number(meta.approvedOvertimeMinutes ?? overtimeCandidateMinutes)))
@@ -1350,7 +1339,7 @@
             const overtimeMinutes = paidMinutes === null ? 0 : Math.max(0, paidMinutes - standardMinutes);
             return {
                 shift, shiftLabel: shift === 'day' ? '白班' : '夜班', fullShift,
-                shiftStart, shiftEnd, actualEnd, effectiveStart, effectiveEnd, overlapMinutes, breakMinutes,
+                shiftStart, shiftEnd, actualEnd, overlapMinutes, breakMinutes,
                 breakPending, appliedBreak, shiftNetMinutes, regularMinutes,
                 overtimeMinutes, overtimeCandidateMinutes, approval, approvedMinutes,
                 regularHours: regularMinutes / 60,
