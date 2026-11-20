@@ -202,7 +202,7 @@
                             <div class="flex items-center justify-between mb-1.5">
                                 <span id="liveEarningsLabel" class="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
                                     <i data-lucide="coins" class="w-3.5 h-3.5 text-amber-500"></i>
-                                    <span>今日已赚窝囊费 (实时累计)</span>
+                                    <span>今日已确认计薪金额</span>
                                 </span>
                                 <span id="liveWorkProgressText" class="text-[11px] font-bold text-brand-600 tabular-nums">0.00h / 8.0h</span>
                             </div>
@@ -370,7 +370,7 @@
                     <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
                         <div>
                             <h2 class="text-base font-bold text-slate-900">计薪边界核对（试算）</h2>
-                            <p class="text-xs text-slate-500 mt-1">独立试算，不改变下方原始工资结果</p>
+                            <p class="text-xs text-slate-500 mt-1">按班次边界、休息与加班审批统一核算正式工资</p>
                         </div>
                         <span class="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700">正式计薪规则</span>
                     </div>
@@ -1386,7 +1386,7 @@
                     <div class="text-xs text-slate-500 mt-1">实际打卡：${rec.startTime || '--:--'} → ${rec.endTime || '未下班'}　·　正式计薪净工时：${formalHours}</div>
                     <div class="grid grid-cols-3 gap-2 mt-2 text-xs">
                         <div class="bg-slate-50 rounded-lg p-2"><div class="text-slate-400">休息扣除</div><div class="font-bold text-slate-700">${breakText}</div></div>
-                        <div class="bg-slate-50 rounded-lg p-2"><div class="text-slate-400">新规则净工时</div><div class="font-bold text-slate-700">${netText}</div></div>
+                        <div class="bg-slate-50 rounded-lg p-2"><div class="text-slate-400">正式计薪净工时</div><div class="font-bold text-slate-700">${netText}</div></div>
                         <div class="bg-slate-50 rounded-lg p-2"><div class="text-slate-400">班次外加班候选</div><div class="font-bold text-amber-700">${(otCandidate / 60).toFixed(2)}h</div></div>
                     </div>
                     <div class="flex flex-wrap items-center gap-2 mt-3">
@@ -1668,19 +1668,23 @@
                 outEl.textContent = '待下班';
                 timelineEl.innerHTML = `<span class="text-brand-600 font-medium">已于 ${rec.startTime} 上班，进行中...</span><button onclick="openRecordEditor('${rec.id}')" class="text-xs underline text-slate-500 cursor-pointer">修改时间</button>`;
             } else {
-                let totalH = 0, totalOt = 0, totalPay = 0;
+                let totalH = 0, totalOt = 0, totalPay = 0, hasPending = false;
                 todayRecs.forEach(r => {
                     const m = calcRecord(r);
+                    if (!m.complete) {
+                        hasPending = true;
+                        return;
+                    }
                     totalH += m.netHours;
                     totalOt += m.otHours;
                     totalPay += m.totalPay;
                 });
                 const lastM = calcRecord(rec);
-                pill.textContent = `已下班 · ${totalH.toFixed(1)}h`;
+                pill.textContent = hasPending ? '已下班 · 待核算' : `已下班 · ${totalH.toFixed(1)}h`;
                 pill.className = 'text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 shrink-0';
                 inEl.textContent = rec.startTime;
                 outEl.innerHTML = `${rec.endTime}${lastM.isCrossDay ? '<span class="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 align-middle">次日</span>' : ''}`;
-                timelineEl.innerHTML = `<span>净工时 <strong>${totalH.toFixed(1)}h</strong> ${totalOt > 0 ? `(含加班 ${totalOt.toFixed(1)}h)` : ''}</span><span class="font-bold text-emerald-600 tabular-nums">今日 +¥${totalPay.toFixed(2)}</span>`;
+                timelineEl.innerHTML = `<span>${hasPending ? '部分记录待补充计薪信息 · ' : ''}已确认净工时 <strong>${totalH.toFixed(1)}h</strong> ${totalOt > 0 ? `(含加班 ${totalOt.toFixed(1)}h)` : ''}</span><span class="font-bold text-emerald-600 tabular-nums">已确认 +¥${totalPay.toFixed(2)}</span>`;
             }
 
             updateLiveEarningsCounter(new Date());
@@ -2106,11 +2110,11 @@
                 let bgCls = 'bg-slate-50/80 hover:bg-slate-100 border-slate-100';
 
                 if (dayRecs.length > 0) {
-                    let sumH = 0, sumOt = 0, sumPay = 0, anyIncomplete = false, anyLeave = false, anySpecialType = false;
+                    let sumH = 0, sumOt = 0, sumPay = 0, anyIncomplete = false, anyPayrollPending = false, anyLeave = false, anySpecialType = false;
                     dayRecs.forEach(r => {
                         const metrics = calcRecord(r);
                         if (metrics.isLeave) anyLeave = true;
-                        if (!metrics.complete) anyIncomplete = true;
+                        if (!metrics.complete) { anyIncomplete = true; if (r.startTime && r.endTime) anyPayrollPending = true; }
                         if (r.type !== 'workday') anySpecialType = true;
                         sumH += metrics.netHours;
                         sumOt += metrics.otHours;
@@ -2122,7 +2126,7 @@
                         statusHtml = `<span class="text-[10px] font-bold text-purple-700 mt-auto">${firstRec.type === 'paid_leave' ? '带薪假' : '请假'}</span>`;
                     } else if (anyIncomplete) {
                         bgCls = 'bg-amber-50/70 hover:bg-amber-100/70 border-amber-200';
-                        statusHtml = `<span class="text-[10px] font-bold text-amber-600 mt-auto">缺下班</span>`;
+                        statusHtml = `<span class="text-[10px] font-bold text-amber-600 mt-auto">${anyPayrollPending ? '待核算' : '缺下班'}</span>`;
                     } else if (sumOt > 0 || anySpecialType) {
                         bgCls = 'bg-amber-50 hover:bg-amber-100/80 border-amber-200';
                         statusHtml = `
