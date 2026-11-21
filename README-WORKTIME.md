@@ -59,3 +59,17 @@ Before real usage, validate with two authenticated test users: ensure the first 
 Apply `supabase/migrations/002_tenant_integrity_and_compensation_privacy.sql` after the base schema and migration 001. It adds composite foreign keys so employee, department, shift, attendance, compensation, approval, and payroll relationships cannot cross organization boundaries even if an application request supplies mismatched IDs. It also narrows compensation reads to the employee concerned and Owner/Admin roles; managers do not receive salary visibility by default.
 
 The migration validates constraints immediately. If it fails, inspect existing rows in a disposable database and resolve tenant mismatches before retrying. It has been committed but not executed against a live or local PostgreSQL instance in this development run.
+
+
+## Payroll calculation core (initial domain slice)
+
+The pure function `worktime/src/domain/payroll-engine.ts` calculates gross/net pay from explicit employee, attendance, and policy inputs. Amounts use integer minor currency units (for CNY, fen) and minutes; intermediate multiplication uses `BigInt` and amounts are rounded half-up to a minor unit. The output records the rule version and separates regular pay, overtime premium, deductions, and unpaid requested overtime.
+
+Current model assumptions (not a legal interpretation):
+- Monthly pay is prorated from the configured standard-period minutes; hourly pay uses a per-hour rate; daily pay uses payable days.
+- Overtime is paid at base rate plus a configurable premium. The default is not embedded; a policy must supply its multiplier in basis points (for example, 15000 means 1.5x total).
+- When approval is required, only approved overtime minutes are paid. When disabled, submitted overtime minutes are paid. Approval must never exceed the submitted amount.
+- Attendance minutes are inputs already net of unpaid breaks. The attendance engine must calculate these from scheduled shifts, punches, breaks, time zone, and correction approvals.
+- Tax, statutory insurance, holiday rules, leave treatment, jurisdiction-specific rates, and complex allowances/deductions are intentionally outside this first calculation slice and must be implemented as separately versioned policies before production use.
+
+Unit tests are in `worktime/src/domain/payroll-engine.test.ts`; run with `npm test` after installing dependencies. The package uses Vitest. This commit does not claim a local build/test run or legal payroll compliance.
