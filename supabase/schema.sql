@@ -255,7 +255,7 @@ for all to authenticated using (public.has_org_role(organization_id, array['owne
 create policy "compensation self or managers read" on public.employee_compensation
 for select to authenticated using (
   public.has_org_role(organization_id, array['owner','admin','manager'])
-  or exists (select 1 from public.employees e where e.id = employee_id and e.user_id = auth.uid() and e.organization_id = organization_id)
+  or exists (select 1 from public.employees e where e.id = employee_compensation.employee_id and e.user_id = auth.uid() and e.organization_id = employee_compensation.organization_id)
 );
 create policy "compensation admins manage" on public.employee_compensation
 for all to authenticated using (public.has_org_role(organization_id, array['owner','admin'])) with check (public.has_org_role(organization_id, array['owner','admin']));
@@ -268,7 +268,7 @@ for all to authenticated using (public.has_org_role(organization_id, array['owne
 create policy "punches self or managers read" on public.punches
 for select to authenticated using (
   public.has_org_role(organization_id, array['owner','admin','manager'])
-  or exists (select 1 from public.employees e where e.id = employee_id and e.user_id = auth.uid() and e.organization_id = organization_id)
+  or exists (select 1 from public.employees e where e.id = punches.employee_id and e.user_id = auth.uid() and e.organization_id = punches.organization_id)
 );
 create policy "punches employees insert own" on public.punches
 for insert to authenticated with check (
@@ -282,7 +282,7 @@ for insert to authenticated with check (public.has_org_role(organization_id, arr
 create policy "attendance self or managers read" on public.attendance_days
 for select to authenticated using (
   public.has_org_role(organization_id, array['owner','admin','manager'])
-  or exists (select 1 from public.employees e where e.id = employee_id and e.user_id = auth.uid() and e.organization_id = organization_id)
+  or exists (select 1 from public.employees e where e.id = attendance_days.employee_id and e.user_id = auth.uid() and e.organization_id = attendance_days.organization_id)
 );
 create policy "attendance admins manage" on public.attendance_days
 for all to authenticated using (public.has_org_role(organization_id, array['owner','admin','manager'])) with check (public.has_org_role(organization_id, array['owner','admin','manager']));
@@ -297,14 +297,14 @@ for update to authenticated using (public.has_org_role(organization_id, array['o
 create policy "payroll runs admins or employees read" on public.payroll_runs
 for select to authenticated using (
   public.has_org_role(organization_id, array['owner','admin','manager'])
-  or exists (select 1 from public.payroll_items pi join public.employees e on e.id = pi.employee_id where pi.payroll_run_id = id and e.user_id = auth.uid() and e.organization_id = organization_id)
+  or exists (select 1 from public.payroll_items pi join public.employees e on e.id = pi.employee_id where pi.payroll_run_id = public.payroll_runs.id and e.user_id = auth.uid() and e.organization_id = public.payroll_runs.organization_id)
 );
 create policy "payroll runs admins manage" on public.payroll_runs
 for all to authenticated using (public.has_org_role(organization_id, array['owner','admin'])) with check (public.has_org_role(organization_id, array['owner','admin']));
 create policy "payroll items self or managers read" on public.payroll_items
 for select to authenticated using (
   public.has_org_role(organization_id, array['owner','admin','manager'])
-  or exists (select 1 from public.employees e where e.id = employee_id and e.user_id = auth.uid() and e.organization_id = organization_id));
+  or exists (select 1 from public.employees e where e.id = payroll_items.employee_id and e.user_id = auth.uid() and e.organization_id = payroll_items.organization_id));
 create policy "payroll items admins manage" on public.payroll_items
 for all to authenticated using (public.has_org_role(organization_id, array['owner','admin'])) with check (public.has_org_role(organization_id, array['owner','admin']));
 
