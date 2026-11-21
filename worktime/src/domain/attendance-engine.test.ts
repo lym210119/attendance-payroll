@@ -68,5 +68,7 @@ describe('calculateAttendance', () => {
     });
     expect(result.status).toBe('missing_out');
     expect(result.missingPunch).toBe(true);
+    expect(result.requestedOvertimeMinutes).toBe(0);
+    expect(Number.isFinite(result.regularMinutes)).toBe(true);
   });
 });
