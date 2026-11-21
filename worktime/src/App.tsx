@@ -53,7 +53,7 @@ export default function App() {
       const overnightShift = shiftEnd <= shiftStart;
       const breakDay = overnightShift && breakStart < shiftStart ? 1 : 0;
       const breakEndDay = breakDay + (breakEnd <= breakStart ? 1 : 0);
-      const punchOutDay = overnightShift || punchOutTime <= punchInTime ? 1 : 0;
+      const punchOutDay = punchOutTime <= punchInTime ? 1 : 0;
       const punches = [
         ...(includePunchIn ? [{ type: 'in' as const, at: stamp(punchInTime), evidenceId: 'demo-clock-in' }] : []),
         ...(includePunchOut ? [{ type: 'out' as const, at: stamp(punchOutTime, punchOutDay), evidenceId: 'demo-clock-out' }] : []),
