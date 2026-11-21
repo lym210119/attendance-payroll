@@ -52,6 +52,21 @@ describe('calculateAttendance', () => {
     expect(result.approvedOvertimeMinutes).toBe(120);
   });
 
+  it('merges overlapping break records so the same minutes are deducted once', () => {
+    const result = calculateAttendance({
+      scheduledStart: '2026-11-21T08:00:00Z',
+      scheduledEnd: '2026-11-21T20:00:00Z',
+      punches: [punch('in', '2026-11-21T08:00:00Z'), punch('out', '2026-11-21T12:00:00Z')],
+      breaks: [
+        { start: '2026-11-21T09:00:00Z', end: '2026-11-21T10:00:00Z' },
+        { start: '2026-11-21T09:30:00Z', end: '2026-11-21T10:30:00Z' },
+      ],
+      policy,
+    });
+    expect(result.unpaidBreakMinutes).toBe(90);
+    expect(result.regularMinutes).toBe(150);
+  });
+
   it('rejects timestamps without an explicit timezone', () => {
     expect(() => calculateAttendance({
       scheduledStart: '2026-11-21T08:00:00',
