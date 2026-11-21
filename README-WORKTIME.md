@@ -52,3 +52,10 @@ const { data: organizationId, error } = await supabase.rpc('create_organization'
 
 
 Before real usage, validate with two authenticated test users: ensure the first caller becomes owner, the second user's membership cannot be forged, unauthenticated calls fail, and duplicate slugs return a safe error. This RPC has not yet been executed against a live Supabase database.
+
+
+## Tenant integrity migration
+
+Apply `supabase/migrations/002_tenant_integrity_and_compensation_privacy.sql` after the base schema and migration 001. It adds composite foreign keys so employee, department, shift, attendance, compensation, approval, and payroll relationships cannot cross organization boundaries even if an application request supplies mismatched IDs. It also narrows compensation reads to the employee concerned and Owner/Admin roles; managers do not receive salary visibility by default.
+
+The migration validates constraints immediately. If it fails, inspect existing rows in a disposable database and resolve tenant mismatches before retrying. It has been committed but not executed against a live or local PostgreSQL instance in this development run.
