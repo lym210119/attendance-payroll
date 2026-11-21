@@ -73,3 +73,17 @@ Current model assumptions (not a legal interpretation):
 - Tax, statutory insurance, holiday rules, leave treatment, jurisdiction-specific rates, and complex allowances/deductions are intentionally outside this first calculation slice and must be implemented as separately versioned policies before production use.
 
 Unit tests are in `worktime/src/domain/payroll-engine.test.ts`; run with `npm test` after installing dependencies. The package uses Vitest. This commit does not claim a local build/test run or legal payroll compliance.
+
+## Attendance calculation core (initial domain slice)
+
+The pure function `worktime/src/domain/attendance-engine.ts` converts a single scheduled shift and immutable punch evidence into payable-minute components. All timestamps must be ISO strings with an explicit UTC offset or `Z`; the engine compares absolute instants, so overnight shifts do not depend on the machine's local timezone.
+
+- Early arrival before the scheduled start is not counted as regular paid time.
+- Work after the scheduled end is reported separately as requested overtime; policy can require explicit approval before it becomes payable.
+- A full shift deducts the configured fixed unpaid break duration. A partial shift deducts the overlap of recorded break intervals with attended work.
+- Missing punches are surfaced as explicit statuses; they are not silently fabricated.
+- Grace periods affect late/early status only and do not add paid minutes.
+- Punch evidence IDs are required. Corrections must be represented by separately approved evidence upstream; this pure function does not mutate original punches.
+
+This is an initial single-shift engine, not yet a complete scheduling or legal-compliance system. It does not yet resolve local wall-clock times from an IANA timezone, model split shifts, holidays, leave, overnight DST transitions from local schedule definitions, or approved correction workflows. Those require explicit policy and persistence layers before production payroll use. Tests cover overnight shifts, early arrival exclusion, partial-shift break deduction, overtime approval, timezone-explicit timestamps, and missing clock-out.
+
