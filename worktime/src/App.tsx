@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { calculateAttendance } from './domain/attendance-engine';
+import { buildShiftDemoTimestamps } from './domain/shift-demo-time';
 
 type Page = 'overview' | 'attendance' | 'employees' | 'payroll' | 'reports';
 type Staff = { id: number; name: string; team: string; state: '正常' | '迟到' | '缺卡'; time: string };
@@ -44,25 +45,19 @@ export default function App() {
   const demoDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
   const attendanceCalculation = useMemo(() => {
     try {
-      const stamp = (time: string, dayOffset = 0) => {
-        const [year, month, day] = demoDay.split('-').map(Number);
-        const target = new Date(Date.UTC(year, month - 1, day + dayOffset));
-        const date = [target.getUTCFullYear(), String(target.getUTCMonth() + 1).padStart(2, '0'), String(target.getUTCDate()).padStart(2, '0')].join('-');
-        return new Date(`${date}T${time}:00+08:00`).toISOString();
-      };
-      const overnightShift = shiftEnd <= shiftStart;
-      const breakDay = overnightShift && breakStart < shiftStart ? 1 : 0;
-      const breakEndDay = breakDay + (breakEnd <= breakStart ? 1 : 0);
-      const punchOutDay = punchOutTime <= punchInTime ? 1 : 0;
+      const timestamps = buildShiftDemoTimestamps({
+        date: demoDay, shiftStart, shiftEnd, punchIn: punchInTime,
+        punchOut: punchOutTime, breakStart, breakEnd,
+      });
       const punches = [
-        ...(includePunchIn ? [{ type: 'in' as const, at: stamp(punchInTime), evidenceId: 'demo-clock-in' }] : []),
-        ...(includePunchOut ? [{ type: 'out' as const, at: stamp(punchOutTime, punchOutDay), evidenceId: 'demo-clock-out' }] : []),
+        ...(includePunchIn ? [{ type: 'in' as const, at: timestamps.punchIn, evidenceId: 'demo-clock-in' }] : []),
+        ...(includePunchOut ? [{ type: 'out' as const, at: timestamps.punchOut, evidenceId: 'demo-clock-out' }] : []),
       ];
       return { result: calculateAttendance({
-        scheduledStart: stamp(shiftStart),
-        scheduledEnd: stamp(shiftEnd, overnightShift ? 1 : 0),
+        scheduledStart: timestamps.scheduledStart,
+        scheduledEnd: timestamps.scheduledEnd,
         punches,
-        breaks: [{ start: stamp(breakStart, breakDay), end: stamp(breakEnd, breakEndDay) }],
+        breaks: [{ start: timestamps.breakStart, end: timestamps.breakEnd }],
         approvedOvertime: approveOvertime,
         policy: { fullShiftUnpaidBreakMinutes: 90, requireOvertimeApproval: true },
       }), error: '' };
