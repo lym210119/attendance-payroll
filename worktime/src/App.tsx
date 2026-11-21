@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { calculateAttendance } from './domain/attendance-engine';
 
 type Page = 'overview' | 'attendance' | 'employees' | 'payroll' | 'reports';
 type Staff = { id: number; name: string; team: string; state: '正常' | '迟到' | '缺卡'; time: string };
@@ -31,6 +32,35 @@ export default function App() {
   const [days, setDays] = useState('22');
   const [overtime, setOvertime] = useState('8');
   const [calculated, setCalculated] = useState(false);
+  const [shiftStart, setShiftStart] = useState('08:00');
+  const [shiftEnd, setShiftEnd] = useState('20:00');
+  const [punchInTime, setPunchInTime] = useState('08:05');
+  const [punchOutTime, setPunchOutTime] = useState('20:30');
+  const [includePunchIn, setIncludePunchIn] = useState(true);
+  const [includePunchOut, setIncludePunchOut] = useState(true);
+  const [approveOvertime, setApproveOvertime] = useState(false);
+  const [breakStart, setBreakStart] = useState('12:00');
+  const [breakEnd, setBreakEnd] = useState('13:30');
+  const demoDay = new Date().toISOString().slice(0, 10);
+  const attendanceCalculation = useMemo(() => {
+    try {
+      const stamp = (time: string) => new Date(`${demoDay}T${time}:00+08:00`).toISOString();
+      const punches = [
+        ...(includePunchIn ? [{ type: 'in' as const, at: stamp(punchInTime), evidenceId: 'demo-clock-in' }] : []),
+        ...(includePunchOut ? [{ type: 'out' as const, at: stamp(punchOutTime), evidenceId: 'demo-clock-out' }] : []),
+      ];
+      return { result: calculateAttendance({
+        scheduledStart: stamp(shiftStart),
+        scheduledEnd: stamp(shiftEnd),
+        punches,
+        breaks: [{ start: stamp(breakStart), end: stamp(breakEnd) }],
+        approvedOvertime: approveOvertime,
+        policy: { fullShiftUnpaidBreakMinutes: 90, requireOvertimeApproval: true },
+      }), error: '' };
+    } catch (error) {
+      return { result: null, error: error instanceof Error ? error.message : '输入有误' };
+    }
+  }, [demoDay, shiftStart, shiftEnd, punchInTime, punchOutTime, includePunchIn, includePunchOut, approveOvertime, breakStart, breakEnd]);
   const pageTitle = nav.find(n => n.key === active)?.label ?? '工作台';
   const today = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }).format(new Date());
   const filteredStaff = useMemo(() => staff.filter(s => (s.name.includes(query.trim()) || s.team.includes(query.trim())) && (filter === '全部' || s.state === filter)), [staff, query, filter]);
@@ -55,7 +85,37 @@ export default function App() {
         <section className="panel staff-panel"><div className="panel-heading"><div><h2>最近打卡</h2><p>今日员工打卡动态</p></div><button className="text-button" onClick={() => setActive('attendance')}>查看全部 →</button></div>{staffTable(staff.slice(0, 5))}</section>
         <section className="panel punch-panel"><div><h2>移动打卡预览</h2><p>此操作仅改变本地演示状态，尚未写入服务器或真实考勤记录。</p></div><button className={punched ? 'primary punched' : 'primary'} onClick={() => setPunched(true)} disabled={punched}>{punched ? '✓ 已完成演示打卡' : '模拟上班打卡'}</button></section>
       </>}
-      {active === 'attendance' && <><div className="stats-grid"><article className="stat-card"><div className="stat-top">应出勤员工</div><strong>128</strong><small>今日排班人数</small></article><article className="stat-card"><div className="stat-top">已打卡</div><strong>{attendanceCount + 110}</strong><small>包含演示记录</small></article><article className="stat-card"><div className="stat-top">迟到</div><strong>{staff.filter(s => s.state === '迟到').length + 3}</strong><small>需要核对</small></article><article className="stat-card"><div className="stat-top">缺卡</div><strong>{staff.filter(s => s.state === '缺卡').length + 6}</strong><small>待补卡或确认</small></article></div><section className="panel"><div className="panel-heading"><div><h2>考勤记录</h2><p>按员工和状态筛选演示数据</p></div><button className="primary" onClick={() => setPunched(true)} disabled={punched}>{punched ? '已模拟打卡' : '模拟本人打卡'}</button></div><div className="toolbar"><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索员工或部门"/><select value={filter} onChange={e => setFilter(e.target.value)}><option>全部</option><option>正常</option><option>迟到</option><option>缺卡</option></select></div>{staffTable(filteredStaff)}</section></>}
+      {active === 'attendance' && <>
+        <div className="stats-grid"><article className="stat-card"><div className="stat-top">应出勤员工</div><strong>128</strong><small>今日排班人数 · 演示</small></article><article className="stat-card"><div className="stat-top">已打卡</div><strong>{attendanceCount + 110}</strong><small>包含演示记录</small></article><article className="stat-card"><div className="stat-top">迟到</div><strong>{staff.filter(s => s.state === '迟到').length + 3}</strong><small>需要核对</small></article><article className="stat-card"><div className="stat-top">缺卡</div><strong>{staff.filter(s => s.state === '缺卡').length + 6}</strong><small>待补卡或确认</small></article></div>
+        <section className="panel engine-panel">
+          <div className="panel-heading"><div><h2>考勤规则实时试算</h2><p>此面板直接调用考勤计算引擎，修改参数会立即重新计算。</p></div><span className="demo-tag">本地试算</span></div>
+          <div className="engine-fields">
+            <label>班次开始<input type="time" value={shiftStart} onChange={e => setShiftStart(e.target.value)}/></label>
+            <label>班次结束<input type="time" value={shiftEnd} onChange={e => setShiftEnd(e.target.value)}/></label>
+            <label>上班打卡<input type="time" value={punchInTime} onChange={e => setPunchInTime(e.target.value)} disabled={!includePunchIn}/></label>
+            <label>下班打卡<input type="time" value={punchOutTime} onChange={e => setPunchOutTime(e.target.value)} disabled={!includePunchOut}/></label>
+            <label>休息开始<input type="time" value={breakStart} onChange={e => setBreakStart(e.target.value)}/></label>
+            <label>休息结束<input type="time" value={breakEnd} onChange={e => setBreakEnd(e.target.value)}/></label>
+          </div>
+          <div className="engine-toggles">
+            <label><input type="checkbox" checked={includePunchIn} onChange={e => setIncludePunchIn(e.target.checked)}/> 有上班打卡</label>
+            <label><input type="checkbox" checked={includePunchOut} onChange={e => setIncludePunchOut(e.target.checked)}/> 有下班打卡</label>
+            <label><input type="checkbox" checked={approveOvertime} onChange={e => setApproveOvertime(e.target.checked)}/> 已审批加班</label>
+          </div>
+          {attendanceCalculation.error ? <div className="engine-error">无法计算：{attendanceCalculation.error}</div> : attendanceCalculation.result && <div className="engine-results">
+            <div className="engine-result-main"><span>计薪正常工时</span><strong>{attendanceCalculation.result.regularMinutes} 分钟</strong><small>约 {(attendanceCalculation.result.regularMinutes / 60).toFixed(2)} 小时</small></div>
+            <div><span>考勤状态</span><strong>{({complete:'正常',late:'迟到',early_leave:'早退',late_and_early_leave:'迟到且早退',missing_in:'缺少上班卡',missing_out:'缺少下班卡',missing_both:'缺少上下班卡'} as Record<string,string>)[attendanceCalculation.result.status]}</strong></div>
+            <div><span>实际出勤</span><strong>{attendanceCalculation.result.attendedMinutes} 分钟</strong></div>
+            <div><span>休息扣除</span><strong>{attendanceCalculation.result.unpaidBreakMinutes} 分钟</strong></div>
+            <div><span>迟到 / 早退</span><strong>{attendanceCalculation.result.lateMinutes} / {attendanceCalculation.result.earlyLeaveMinutes} 分钟</strong></div>
+            <div><span>申请加班</span><strong>{attendanceCalculation.result.requestedOvertimeMinutes} 分钟</strong></div>
+            <div><span>已批准加班</span><strong>{attendanceCalculation.result.approvedOvertimeMinutes} 分钟</strong></div>
+            <div><span>未批准加班</span><strong>{attendanceCalculation.result.unpaidOvertimeMinutes} 分钟</strong></div>
+          </div>}
+          <div className="notice">试算日期按北京时间生成。完整班次固定扣除 90 分钟休息；不完整班次按实际休息区间与出勤重叠部分扣除。提前到岗不计薪，超出班次结束的时间需审批后才计入已批准加班。数据仅在当前浏览器内计算，不会保存到服务器。</div>
+        </section>
+        <section className="panel"><div className="panel-heading"><div><h2>考勤记录</h2><p>按员工和状态筛选演示数据</p></div><button className="primary" onClick={() => setPunched(true)} disabled={punched}>{punched ? '已模拟打卡' : '模拟本人打卡'}</button></div><div className="toolbar"><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索员工或部门"/><select value={filter} onChange={e => setFilter(e.target.value)}><option>全部</option><option>正常</option><option>迟到</option><option>缺卡</option></select></div>{staffTable(filteredStaff)}</section>
+      </>}
       {active === 'employees' && <section className="panel"><div className="panel-heading"><div><h2>员工档案</h2><p>当前为浏览器本地演示数据，刷新页面后新增记录会重置。</p></div><button className="primary" onClick={() => setShowAdd(v => !v)}>{showAdd ? '取消' : '+ 添加员工'}</button></div>{showAdd && <div className="add-form"><input value={newName} onChange={e => setNewName(e.target.value)} placeholder="员工姓名"/><select value={newTeam} onChange={e => setNewTeam(e.target.value)}><option>运营部</option><option>仓储部</option><option>门店一组</option><option>财务部</option></select><button className="primary" onClick={addEmployee} disabled={!newName.trim()}>保存员工</button></div>}<div className="toolbar"><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索姓名或部门"/></div><div className="employee-summary">共 {staff.length} 位演示员工</div>{staffTable(staff.filter(s => s.name.includes(query.trim()) || s.team.includes(query.trim())))}</section>}
       {active === 'payroll' && <section className="panel payroll-panel"><div className="panel-heading"><div><h2>工资试算器</h2><p>仅为交互演示，不作为实际工资或合规薪资结果。</p></div><span className="demo-tag">试算模式</span></div><div className="payroll-fields"><label>月基本工资（元）<input inputMode="decimal" value={salary} onChange={e => { setSalary(e.target.value); setCalculated(false); }}/></label><label>计薪天数<input inputMode="decimal" value={days} onChange={e => { setDays(e.target.value); setCalculated(false); }}/></label><label>审批通过加班小时<input inputMode="decimal" value={overtime} onChange={e => { setOvertime(e.target.value); setCalculated(false); }}/></label></div><button className="primary" onClick={() => setCalculated(true)}>计算演示工资</button>{calculated && <div className="pay-result"><span>演示应发金额</span><strong>{money(pay)}</strong><small>示例公式：月薪 ÷ 22 × 计薪天数 + 月薪 ÷ 174 × 加班小时 × 1.5。实际规则须由企业配置并经过审核。</small></div>}<div className="notice">正式工资引擎仍在开发中。当前试算器不包含社保个税、津贴扣款、节假日规则、缺勤规则及地区法规，不可用于正式发薪。</div></section>}
       {active === 'reports' && <section className="panel"><div className="panel-heading"><div><h2>经营报表</h2><p>示例汇总指标，后续接入可追溯的真实数据。</p></div></div><div className="report-grid"><div><span>本月出勤率</span><strong>96.8%</strong><small>演示数据</small></div><div><span>异常考勤</span><strong>23</strong><small>待处理记录</small></div><div><span>预计工资总额</span><strong>¥286,450</strong><small>未审核</small></div></div><div className="notice">报表导出功能将在接入真实数据与权限校验后开放，避免导出未经授权的员工及薪酬信息。</div></section>}
