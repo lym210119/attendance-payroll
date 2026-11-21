@@ -7,7 +7,7 @@ WorkTime (工时云) is a multi-tenant attendance and payroll SaaS MVP.
 - Raw clock punches are immutable evidence; payroll calculations are separate derived records.
 - Payroll runs snapshot calculation inputs and outputs so later rule edits do not change settled periods.
 - Mobile-first employee experience; responsive admin experience.
-- The legacy single-user app in `main` is preserved. SaaS work is isolated on `saas-mvp`.
+- WorkTime is an independent SaaS product. The legacy app is not a compatibility constraint; its branch and production site are left untouched unless explicitly authorized.
 
 ## MVP milestones
 1. Database and tenant security foundation
