@@ -44,3 +44,5 @@
 .engine-results small{font-size:10px;color:#8794a8}
 .engine-error{padding:12px;border-radius:9px;background:#fff0f0;color:#c34d54;font-size:12px}
 @media(max-width:700px){.engine-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.engine-results{grid-template-columns:repeat(2,minmax(0,1fr))}.engine-results .engine-result-main{grid-column:1/-1}.engine-toggles{display:grid;gap:10px}}
+
+.shift-presets{display:flex;gap:9px;flex-wrap:wrap;margin:4px 0 15px}.shift-presets button{border:1px solid #dfe8f6;background:#f8faff;color:#47668e;border-radius:9px;padding:9px 12px;font-size:11px;font-weight:600;cursor:pointer}.shift-presets button:active{background:#edf4ff}@media(max-width:700px){.shift-presets button{flex:1;min-width:135px}}
