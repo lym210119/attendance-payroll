@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { calculateAttendance } from './domain/attendance-engine';
 import { buildShiftDemoTimestamps } from './domain/shift-demo-time';
 
@@ -23,6 +23,22 @@ const money = (value: number) => new Intl.NumberFormat('zh-CN', { style: 'curren
 export default function App() {
   const [active, setActive] = useState<Page>('overview');
   const [staff, setStaff] = useState(initialStaff);
+  const [demoLoaded, setDemoLoaded] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('worktime-demo-v1');
+      if (saved) {
+        const parsed = JSON.parse(saved) as { staff?: Staff[]; punched?: boolean };
+        if (Array.isArray(parsed.staff) && parsed.staff.every(s => s && typeof s.id === 'number' && typeof s.name === 'string' && typeof s.team === 'string' && ['正常','迟到','缺卡'].includes(s.state) && typeof s.time === 'string')) setStaff(parsed.staff);
+        if (typeof parsed.punched === 'boolean') setPunched(parsed.punched);
+      }
+    } catch { /* Ignore malformed demo data and use defaults. */ }
+    setDemoLoaded(true);
+  }, []);
+  useEffect(() => {
+    if (!demoLoaded) return;
+    try { localStorage.setItem('worktime-demo-v1', JSON.stringify({ staff, punched })); } catch { /* Storage may be unavailable. */ }
+  }, [demoLoaded, staff, punched]);
   const [punched, setPunched] = useState(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('全部');
@@ -120,7 +136,7 @@ export default function App() {
         </section>
         <section className="panel"><div className="panel-heading"><div><h2>考勤记录</h2><p>按员工和状态筛选演示数据</p></div><button className="primary" onClick={() => setPunched(true)} disabled={punched}>{punched ? '已模拟打卡' : '模拟本人打卡'}</button></div><div className="toolbar"><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索员工或部门"/><select value={filter} onChange={e => setFilter(e.target.value)}><option>全部</option><option>正常</option><option>迟到</option><option>缺卡</option></select></div>{staffTable(filteredStaff)}</section>
       </>}
-      {active === 'employees' && <section className="panel"><div className="panel-heading"><div><h2>员工档案</h2><p>当前为浏览器本地演示数据，刷新页面后新增记录会重置。</p></div><button className="primary" onClick={() => setShowAdd(v => !v)}>{showAdd ? '取消' : '+ 添加员工'}</button></div>{showAdd && <div className="add-form"><input value={newName} onChange={e => setNewName(e.target.value)} placeholder="员工姓名"/><select value={newTeam} onChange={e => setNewTeam(e.target.value)}><option>运营部</option><option>仓储部</option><option>门店一组</option><option>财务部</option></select><button className="primary" onClick={addEmployee} disabled={!newName.trim()}>保存员工</button></div>}<div className="toolbar"><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索姓名或部门"/></div><div className="employee-summary">共 {staff.length} 位演示员工</div>{staffTable(staff.filter(s => s.name.includes(query.trim()) || s.team.includes(query.trim())))}</section>}
+      {active === 'employees' && <section className="panel"><div className="panel-heading"><div><h2>员工档案</h2><p>当前为浏览器本地演示数据，刷新页面后会保留；换设备不会同步。</p></div><button className="primary" onClick={() => setShowAdd(v => !v)}>{showAdd ? '取消' : '+ 添加员工'}</button></div>{showAdd && <div className="add-form"><input value={newName} onChange={e => setNewName(e.target.value)} placeholder="员工姓名"/><select value={newTeam} onChange={e => setNewTeam(e.target.value)}><option>运营部</option><option>仓储部</option><option>门店一组</option><option>财务部</option></select><button className="primary" onClick={addEmployee} disabled={!newName.trim()}>保存员工</button></div>}<div className="toolbar"><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索姓名或部门"/></div><div className="employee-summary">共 {staff.length} 位演示员工</div>{staffTable(staff.filter(s => s.name.includes(query.trim()) || s.team.includes(query.trim())))}</section>}
       {active === 'payroll' && <section className="panel payroll-panel"><div className="panel-heading"><div><h2>工资试算器</h2><p>仅为交互演示，不作为实际工资或合规薪资结果。</p></div><span className="demo-tag">试算模式</span></div><div className="payroll-fields"><label>月基本工资（元）<input inputMode="decimal" value={salary} onChange={e => { setSalary(e.target.value); setCalculated(false); }}/></label><label>计薪天数<input inputMode="decimal" value={days} onChange={e => { setDays(e.target.value); setCalculated(false); }}/></label><label>审批通过加班小时<input inputMode="decimal" value={overtime} onChange={e => { setOvertime(e.target.value); setCalculated(false); }}/></label></div><button className="primary" onClick={() => setCalculated(true)}>计算演示工资</button>{calculated && <div className="pay-result"><span>演示应发金额</span><strong>{money(pay)}</strong><small>示例公式：月薪 ÷ 22 × 计薪天数 + 月薪 ÷ 174 × 加班小时 × 1.5。实际规则须由企业配置并经过审核。</small></div>}<div className="notice">正式工资引擎仍在开发中。当前试算器不包含社保个税、津贴扣款、节假日规则、缺勤规则及地区法规，不可用于正式发薪。</div></section>}
       {active === 'reports' && <section className="panel"><div className="panel-heading"><div><h2>经营报表</h2><p>示例汇总指标，后续接入可追溯的真实数据。</p></div></div><div className="report-grid"><div><span>本月出勤率</span><strong>96.8%</strong><small>演示数据</small></div><div><span>异常考勤</span><strong>23</strong><small>待处理记录</small></div><div><span>预计工资总额</span><strong>¥286,450</strong><small>未审核</small></div></div><div className="notice">报表导出功能将在接入真实数据与权限校验后开放，避免导出未经授权的员工及薪酬信息。</div></section>}
       <footer>WorkTime SaaS · MVP Preview <span>演示数据，不代表真实业务记录</span></footer></section>
