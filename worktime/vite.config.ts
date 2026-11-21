@@ -3,6 +3,6 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  // The isolated GitHub Pages preview is hosted under the repository path.
-  base: '/attendance-payroll/',
+  // Deploy the isolated WorkTime preview at the Vercel project root.
+  base: '/',
 });
