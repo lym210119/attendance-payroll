@@ -81,7 +81,7 @@ export function calculateAttendance(input: AttendanceInput): AttendanceResult {
   }
   if (open !== null) missingOut = true;
   const missingBoth = firstIn === null && events.length === 0;
-  if (open !== null) work.push([open, Number.POSITIVE_INFINITY]);
+  // An unmatched clock-in is evidence of a missing punch, not proof of work after shift end.\n  if (open !== null) work.push([open, end]);
 
   let scheduledWorkMs = 0;
   let overtimeMs = 0;
