@@ -55,7 +55,7 @@ describe('calculatePayroll', () => {
     const result = calculatePayroll({
       currency: 'CNY', ruleVersion: 'v1', policy, deductionsMinor: 500,
       employee: { employeeId: 'E5', payType: 'hourly', baseRateMinor: 1000 },
-      attendance: { regularMinutes: 60 },
+      attendance: { regularMinutes: 60, requestedOvertimeMinutes: 0, approvedOvertimeMinutes: 0 },
     });
     expect(result.grossPayMinor).toBe(1000);
     expect(result.netPayMinor).toBe(500);
