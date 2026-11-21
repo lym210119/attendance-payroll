@@ -23,6 +23,7 @@ const money = (value: number) => new Intl.NumberFormat('zh-CN', { style: 'curren
 export default function App() {
   const [active, setActive] = useState<Page>('overview');
   const [staff, setStaff] = useState(initialStaff);
+  const [punched, setPunched] = useState(false);
   const [demoLoaded, setDemoLoaded] = useState(false);
   useEffect(() => {
     try {
@@ -39,7 +40,6 @@ export default function App() {
     if (!demoLoaded) return;
     try { localStorage.setItem('worktime-demo-v1', JSON.stringify({ staff, punched })); } catch { /* Storage may be unavailable. */ }
   }, [demoLoaded, staff, punched]);
-  const [punched, setPunched] = useState(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('全部');
   const [newName, setNewName] = useState('');
