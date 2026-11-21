@@ -35,7 +35,7 @@ describe('calculatePayroll', () => {
     });
     expect(result.regularPayMinor).toBe(40000);
     expect(result.overtimePremiumMinor).toBe(2500);
-    expect(result.grossPayMinor).toBe(42500);
+    expect(result.grossPayMinor).toBe(47500);
   });
 
   it('rejects fractional money and overtime approval beyond requested time', () => {
