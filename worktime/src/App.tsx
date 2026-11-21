@@ -109,6 +109,7 @@ export default function App() {
         <div className="stats-grid"><article className="stat-card"><div className="stat-top">应出勤员工</div><strong>128</strong><small>今日排班人数 · 演示</small></article><article className="stat-card"><div className="stat-top">已打卡</div><strong>{attendanceCount + 110}</strong><small>包含演示记录</small></article><article className="stat-card"><div className="stat-top">迟到</div><strong>{staff.filter(s => s.state === '迟到').length + 3}</strong><small>需要核对</small></article><article className="stat-card"><div className="stat-top">缺卡</div><strong>{staff.filter(s => s.state === '缺卡').length + 6}</strong><small>待补卡或确认</small></article></div>
         <section className="panel engine-panel">
           <div className="panel-heading"><div><h2>考勤规则实时试算</h2><p>此面板直接调用考勤计算引擎，修改参数会立即重新计算。</p></div><span className="demo-tag">本地试算</span></div>
+          <div className="shift-presets"><button type="button" onClick={() => { setShiftStart('08:00'); setShiftEnd('20:00'); setBreakStart('12:00'); setBreakEnd('13:30'); }}>日班 · 08:00–20:00</button><button type="button" onClick={() => { setShiftStart('20:00'); setShiftEnd('08:00'); setBreakStart('00:30'); setBreakEnd('02:00'); }}>夜班 · 20:00–08:00</button></div>
           <div className="engine-fields">
             <label>班次开始<input type="time" value={shiftStart} onChange={e => setShiftStart(e.target.value)}/></label>
             <label>班次结束<input type="time" value={shiftEnd} onChange={e => setShiftEnd(e.target.value)}/></label>
