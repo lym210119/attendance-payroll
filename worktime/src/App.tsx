@@ -41,19 +41,28 @@ export default function App() {
   const [approveOvertime, setApproveOvertime] = useState(false);
   const [breakStart, setBreakStart] = useState('12:00');
   const [breakEnd, setBreakEnd] = useState('13:30');
-  const demoDay = new Date().toISOString().slice(0, 10);
+  const demoDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
   const attendanceCalculation = useMemo(() => {
     try {
-      const stamp = (time: string) => new Date(`${demoDay}T${time}:00+08:00`).toISOString();
+      const stamp = (time: string, dayOffset = 0) => {
+        const [year, month, day] = demoDay.split('-').map(Number);
+        const target = new Date(Date.UTC(year, month - 1, day + dayOffset));
+        const date = [target.getUTCFullYear(), String(target.getUTCMonth() + 1).padStart(2, '0'), String(target.getUTCDate()).padStart(2, '0')].join('-');
+        return new Date(`${date}T${time}:00+08:00`).toISOString();
+      };
+      const overnightShift = shiftEnd <= shiftStart;
+      const breakDay = overnightShift && breakStart < shiftStart ? 1 : 0;
+      const breakEndDay = breakDay + (breakEnd <= breakStart ? 1 : 0);
+      const punchOutDay = overnightShift || punchOutTime <= punchInTime ? 1 : 0;
       const punches = [
         ...(includePunchIn ? [{ type: 'in' as const, at: stamp(punchInTime), evidenceId: 'demo-clock-in' }] : []),
-        ...(includePunchOut ? [{ type: 'out' as const, at: stamp(punchOutTime), evidenceId: 'demo-clock-out' }] : []),
+        ...(includePunchOut ? [{ type: 'out' as const, at: stamp(punchOutTime, punchOutDay), evidenceId: 'demo-clock-out' }] : []),
       ];
       return { result: calculateAttendance({
         scheduledStart: stamp(shiftStart),
-        scheduledEnd: stamp(shiftEnd),
+        scheduledEnd: stamp(shiftEnd, overnightShift ? 1 : 0),
         punches,
-        breaks: [{ start: stamp(breakStart), end: stamp(breakEnd) }],
+        breaks: [{ start: stamp(breakStart, breakDay), end: stamp(breakEnd, breakEndDay) }],
         approvedOvertime: approveOvertime,
         policy: { fullShiftUnpaidBreakMinutes: 90, requireOvertimeApproval: true },
       }), error: '' };
