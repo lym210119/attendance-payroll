@@ -42,7 +42,7 @@ describe('calculatePayroll', () => {
     expect(() => calculatePayroll({
       currency: 'CNY', ruleVersion: 'v1', policy,
       employee: { employeeId: 'E4', payType: 'hourly', baseRateMinor: 10.5 },
-      attendance: { regularMinutes: 60 },
+      attendance: { regularMinutes: 60, approvedOvertimeMinutes: 0 },
     })).toThrow(/baseRateMinor/);
     expect(() => calculatePayroll({
       currency: 'CNY', ruleVersion: 'v1', policy,
