@@ -41,12 +41,23 @@ create table if not exists public.employees (
   full_name text not null,
   department_id uuid references public.departments(id) on delete set null,
   pay_type text not null default 'monthly' check (pay_type in ('monthly','hourly','daily')),
-  base_pay numeric(12,2) not null default 0 check (base_pay >= 0),
   hire_date date,
   employment_status text not null default 'active' check (employment_status in ('active','inactive','terminated')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (organization_id, employee_code)
+);
+
+create table if not exists public.employee_compensation (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  employee_id uuid not null references public.employees(id) on delete cascade,
+  pay_type text not null check (pay_type in ('monthly','hourly','daily')),
+  base_pay numeric(12,2) not null default 0 check (base_pay >= 0),
+  effective_from date not null default current_date,
+  effective_to date,
+  created_at timestamptz not null default now(),
+  check (effective_to is null or effective_to >= effective_from)
 );
 
 create table if not exists public.shift_templates (
@@ -207,6 +218,7 @@ alter table public.organizations enable row level security;
 alter table public.organization_members enable row level security;
 alter table public.departments enable row level security;
 alter table public.employees enable row level security;
+alter table public.employee_compensation enable row level security;
 alter table public.shift_templates enable row level security;
 alter table public.punches enable row level security;
 alter table public.attendance_days enable row level security;
@@ -232,18 +244,32 @@ for select to authenticated using (public.is_org_member(organization_id));
 create policy "departments admins manage" on public.departments
 for all to authenticated using (public.has_org_role(organization_id, array['owner','admin'])) with check (public.has_org_role(organization_id, array['owner','admin']));
 
-create policy "employees org members read" on public.employees
-for select to authenticated using (public.is_org_member(organization_id));
+create policy "employees self or managers read" on public.employees
+for select to authenticated using (
+  public.is_org_member(organization_id)
+  and (user_id = auth.uid() or public.has_org_role(organization_id, array['owner','admin','manager']))
+);
 create policy "employees admins manage" on public.employees
 for all to authenticated using (public.has_org_role(organization_id, array['owner','admin','manager'])) with check (public.has_org_role(organization_id, array['owner','admin','manager']));
+
+create policy "compensation self or managers read" on public.employee_compensation
+for select to authenticated using (
+  public.has_org_role(organization_id, array['owner','admin','manager'])
+  or exists (select 1 from public.employees e where e.id = employee_id and e.user_id = auth.uid() and e.organization_id = organization_id)
+);
+create policy "compensation admins manage" on public.employee_compensation
+for all to authenticated using (public.has_org_role(organization_id, array['owner','admin'])) with check (public.has_org_role(organization_id, array['owner','admin']));
 
 create policy "shift templates org members read" on public.shift_templates
 for select to authenticated using (public.is_org_member(organization_id));
 create policy "shift templates admins manage" on public.shift_templates
 for all to authenticated using (public.has_org_role(organization_id, array['owner','admin','manager'])) with check (public.has_org_role(organization_id, array['owner','admin','manager']));
 
-create policy "punches org members read" on public.punches
-for select to authenticated using (public.is_org_member(organization_id));
+create policy "punches self or managers read" on public.punches
+for select to authenticated using (
+  public.has_org_role(organization_id, array['owner','admin','manager'])
+  or exists (select 1 from public.employees e where e.id = employee_id and e.user_id = auth.uid() and e.organization_id = organization_id)
+);
 create policy "punches employees insert own" on public.punches
 for insert to authenticated with check (
   public.is_org_member(organization_id)
@@ -253,8 +279,11 @@ create policy "punches admins insert" on public.punches
 for insert to authenticated with check (public.has_org_role(organization_id, array['owner','admin','manager']));
 -- No update/delete policy for punches: raw punches are append-only for authenticated users.
 
-create policy "attendance org members read" on public.attendance_days
-for select to authenticated using (public.is_org_member(organization_id));
+create policy "attendance self or managers read" on public.attendance_days
+for select to authenticated using (
+  public.has_org_role(organization_id, array['owner','admin','manager'])
+  or exists (select 1 from public.employees e where e.id = employee_id and e.user_id = auth.uid() and e.organization_id = organization_id)
+);
 create policy "attendance admins manage" on public.attendance_days
 for all to authenticated using (public.has_org_role(organization_id, array['owner','admin','manager'])) with check (public.has_org_role(organization_id, array['owner','admin','manager']));
 
@@ -265,12 +294,17 @@ for insert to authenticated with check (public.is_org_member(organization_id) an
 create policy "approvals admins review" on public.approvals
 for update to authenticated using (public.has_org_role(organization_id, array['owner','admin','manager'])) with check (public.has_org_role(organization_id, array['owner','admin','manager']));
 
-create policy "payroll runs admins read" on public.payroll_runs
-for select to authenticated using (public.has_org_role(organization_id, array['owner','admin','manager']));
+create policy "payroll runs admins or employees read" on public.payroll_runs
+for select to authenticated using (
+  public.has_org_role(organization_id, array['owner','admin','manager'])
+  or exists (select 1 from public.payroll_items pi join public.employees e on e.id = pi.employee_id where pi.payroll_run_id = id and e.user_id = auth.uid() and e.organization_id = organization_id)
+);
 create policy "payroll runs admins manage" on public.payroll_runs
 for all to authenticated using (public.has_org_role(organization_id, array['owner','admin'])) with check (public.has_org_role(organization_id, array['owner','admin']));
-create policy "payroll items admins read" on public.payroll_items
-for select to authenticated using (public.has_org_role(organization_id, array['owner','admin','manager']));
+create policy "payroll items self or managers read" on public.payroll_items
+for select to authenticated using (
+  public.has_org_role(organization_id, array['owner','admin','manager'])
+  or exists (select 1 from public.employees e where e.id = employee_id and e.user_id = auth.uid() and e.organization_id = organization_id));
 create policy "payroll items admins manage" on public.payroll_items
 for all to authenticated using (public.has_org_role(organization_id, array['owner','admin'])) with check (public.has_org_role(organization_id, array['owner','admin']));
 
