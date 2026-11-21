@@ -102,8 +102,16 @@ export function calculateAttendance(input: AttendanceInput): AttendanceResult {
     if (be <= bs) throw new Error('休息结束时间必须晚于开始时间');
     return [bs, be] as [number, number];
   });
+  // Merge overlapping break records before calculating deductions. This prevents
+  // duplicate or overlapping break entries from deducting the same minute twice.
+  const mergedBreaks: Array<[number, number]> = [];
+  for (const [bs, be] of breakIntervals.sort((a, b) => a[0] - b[0])) {
+    const previous = mergedBreaks[mergedBreaks.length - 1];
+    if (previous && bs <= previous[1]) previous[1] = Math.max(previous[1], be);
+    else mergedBreaks.push([bs, be]);
+  }
   let actualBreakMs = 0;
-  for (const [bs, be] of breakIntervals) {
+  for (const [bs, be] of mergedBreaks) {
     for (const [a, b] of work) actualBreakMs += overlap(a, b, bs, be);
   }
   const scheduledMinutes = minutes(end - start);
