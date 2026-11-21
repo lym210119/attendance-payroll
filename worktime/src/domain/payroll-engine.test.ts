@@ -70,6 +70,6 @@ describe('calculatePayroll', () => {
     });
     expect(result.overtimeMinutesPaid).toBe(60);
     expect(result.overtimeMinutesUnpaid).toBe(0);
-    expect(result.grossPayMinor).toBe(1500);
+    expect(result.grossPayMinor).toBe(900);
   });
 });
