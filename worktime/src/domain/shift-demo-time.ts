@@ -42,9 +42,10 @@ export function buildShiftDemoTimestamps(input: ShiftDemoTimeInput): ShiftDemoTi
   const overnight = input.shiftEnd <= input.shiftStart;
   const breakStartDay = overnight && input.breakStart < input.shiftStart ? 1 : 0;
   const breakEndDay = breakStartDay + (input.breakEnd <= input.breakStart ? 1 : 0);
-  // For a night shift, an early-morning clock-in/out belongs to the following
-  // calendar date even when it is later than the shift's start time by clock.
-  const punchInDay = overnight && input.punchIn < input.shiftStart ? 1 : 0;
+  // In this demo only, morning clock-in times are assigned to the next date;
+  // evening times remain on the shift's starting date. This resolves the
+  // ambiguous 24-hour clock without changing the production attendance model.
+  const punchInDay = overnight && input.punchIn < '12:00' ? 1 : 0;
   const punchOutDay = overnight
     ? (input.punchOut <= input.shiftStart ? 1 : 0)
     : (input.punchOut <= input.punchIn ? 1 : 0);
