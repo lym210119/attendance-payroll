@@ -80,7 +80,7 @@ The pure function `worktime/src/domain/attendance-engine.ts` converts a single s
 
 - Early arrival before the scheduled start is not counted as regular paid time.
 - Work after the scheduled end is reported separately as requested overtime; policy can require explicit approval before it becomes payable.
-- A full shift deducts the configured fixed unpaid break duration. A partial shift deducts the overlap of recorded break intervals with attended work.
+- A full shift deducts the configured fixed unpaid break duration. A partial shift deducts only the overlap of recorded break intervals with attended work inside the scheduled window; breaks during overtime cannot reduce regular payable minutes. Break records are merged to prevent double deductions. Shift-threshold and grace-minute policy values are validated as non-negative/positive integers.
 - Missing punches are surfaced as explicit statuses; they are not silently fabricated.
 - Grace periods affect late/early status only and do not add paid minutes.
 - Punch evidence IDs are required. Corrections must be represented by separately approved evidence upstream; this pure function does not mutate original punches.
