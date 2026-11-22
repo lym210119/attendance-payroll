@@ -37,6 +37,25 @@ describe('buildShiftDemoTimestamps', () => {
     expect(result.breakEnd).toBe('2026-11-21T05:30:00.000Z');
   });
 
+  it('places after-midnight clock-in and clock-out on the next date for a night shift', () => {
+    expect(buildShiftDemoTimestamps({
+      date: '2026-11-21',
+      shiftStart: '20:00',
+      shiftEnd: '08:00',
+      punchIn: '01:00',
+      punchOut: '08:00',
+      breakStart: '01:30',
+      breakEnd: '02:30',
+    })).toEqual({
+      scheduledStart: '2026-11-21T12:00:00.000Z',
+      scheduledEnd: '2026-11-22T00:00:00.000Z',
+      punchIn: '2026-11-21T17:00:00.000Z',
+      punchOut: '2026-11-22T00:00:00.000Z',
+      breakStart: '2026-11-21T17:30:00.000Z',
+      breakEnd: '2026-11-21T18:30:00.000Z',
+    });
+  });
+
   it('rejects malformed date and time inputs', () => {
     expect(() => buildShiftDemoTimestamps({
       date: '2026/11/21',
@@ -46,6 +65,15 @@ describe('buildShiftDemoTimestamps', () => {
       punchOut: '08:15',
       breakStart: '00:30',
       breakEnd: '02:00',
+    })).toThrow('日期或时间格式无效');
+    expect(() => buildShiftDemoTimestamps({
+      date: '2026-02-31',
+      shiftStart: '08:00',
+      shiftEnd: '20:00',
+      punchIn: '08:00',
+      punchOut: '20:00',
+      breakStart: '12:00',
+      breakEnd: '13:00',
     })).toThrow('日期或时间格式无效');
   });
 });
