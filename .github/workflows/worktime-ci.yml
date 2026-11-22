@@ -32,8 +32,10 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
-      - name: Report dependency vulnerabilities
-        run: npm audit --json > npm-audit.json || node -e "const a=require('./npm-audit.json'); for (const [name,v] of Object.entries(a.vulnerabilities || {})) console.log(name, v.severity, 'fixAvailable:', JSON.stringify(v.fixAvailable)); console.log('Totals:', JSON.stringify(a.metadata?.vulnerabilities));"
+      - name: Fail on high or critical dependency vulnerabilities
+        run: npm audit --audit-level=high
+      - name: TypeScript project check
+        run: npx tsc -b --pretty false
       - name: Run unit tests
         run: npm test
       - name: Build production bundle
