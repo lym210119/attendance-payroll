@@ -75,6 +75,46 @@ describe('calculateAttendance', () => {
     })).toThrow(/时区/);
   });
 
+  it('does not deduct a break that occurs entirely during overtime', () => {
+    const result = calculateAttendance({
+      scheduledStart: '2026-11-21T08:00:00Z',
+      scheduledEnd: '2026-11-21T20:00:00Z',
+      punches: [punch('in', '2026-11-21T18:00:00Z'), punch('out', '2026-11-21T21:00:00Z')],
+      breaks: [{ start: '2026-11-21T20:30:00Z', end: '2026-11-21T20:45:00Z' }],
+      policy,
+    });
+    expect(result.regularMinutes).toBe(120);
+    expect(result.requestedOvertimeMinutes).toBe(60);
+    expect(result.unpaidBreakMinutes).toBe(0);
+  });
+
+  it('deducts only the scheduled portion of a break crossing into overtime', () => {
+    const result = calculateAttendance({
+      scheduledStart: '2026-11-21T08:00:00Z',
+      scheduledEnd: '2026-11-21T20:00:00Z',
+      punches: [punch('in', '2026-11-21T18:00:00Z'), punch('out', '2026-11-21T21:00:00Z')],
+      breaks: [{ start: '2026-11-21T19:30:00Z', end: '2026-11-21T20:30:00Z' }],
+      policy,
+    });
+    expect(result.regularMinutes).toBe(90);
+    expect(result.requestedOvertimeMinutes).toBe(60);
+    expect(result.unpaidBreakMinutes).toBe(30);
+  });
+
+  it('rejects invalid shift threshold and negative grace values', () => {
+    const base = {
+      scheduledStart: '2026-11-21T08:00:00Z',
+      scheduledEnd: '2026-11-21T20:00:00Z',
+      punches: [punch('in', '2026-11-21T08:00:00Z'), punch('out', '2026-11-21T20:00:00Z')],
+    };
+    expect(() => calculateAttendance({ ...base, policy: { ...policy, fullShiftThresholdMinutes: 0 } }))
+      .toThrow(/完整班次判定/);
+    expect(() => calculateAttendance({ ...base, policy: { ...policy, lateGraceMinutes: -1 } }))
+      .toThrow(/迟到宽限/);
+    expect(() => calculateAttendance({ ...base, policy: { ...policy, earlyLeaveGraceMinutes: 1.5 } }))
+      .toThrow(/早退宽限/);
+  });
+
   it('flags missing clock-out instead of silently completing the shift', () => {
     const result = calculateAttendance({
       scheduledStart: '2026-11-21T08:00:00Z',
