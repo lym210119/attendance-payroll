@@ -24,6 +24,10 @@ function timestamp(date: string, time: string, dayOffset: number): string {
     throw new Error('日期或时间格式无效');
   }
   const [year, month, day] = date.split('-').map(Number);
+  const baseDate = new Date(Date.UTC(year, month - 1, day));
+  if (baseDate.getUTCFullYear() !== year || baseDate.getUTCMonth() !== month - 1 || baseDate.getUTCDate() !== day) {
+    throw new Error('日期或时间格式无效');
+  }
   const shifted = new Date(Date.UTC(year, month - 1, day + dayOffset));
   const localDate = [
     shifted.getUTCFullYear(),
@@ -38,12 +42,17 @@ export function buildShiftDemoTimestamps(input: ShiftDemoTimeInput): ShiftDemoTi
   const overnight = input.shiftEnd <= input.shiftStart;
   const breakStartDay = overnight && input.breakStart < input.shiftStart ? 1 : 0;
   const breakEndDay = breakStartDay + (input.breakEnd <= input.breakStart ? 1 : 0);
-  const punchOutDay = input.punchOut <= input.punchIn ? 1 : 0;
+  // For a night shift, an early-morning clock-in/out belongs to the following
+  // calendar date even when it is later than the shift's start time by clock.
+  const punchInDay = overnight && input.punchIn < input.shiftStart ? 1 : 0;
+  const punchOutDay = overnight
+    ? (input.punchOut <= input.shiftStart ? 1 : 0)
+    : (input.punchOut <= input.punchIn ? 1 : 0);
 
   return {
     scheduledStart: timestamp(input.date, input.shiftStart, 0),
     scheduledEnd: timestamp(input.date, input.shiftEnd, overnight ? 1 : 0),
-    punchIn: timestamp(input.date, input.punchIn, 0),
+    punchIn: timestamp(input.date, input.punchIn, punchInDay),
     punchOut: timestamp(input.date, input.punchOut, punchOutDay),
     breakStart: timestamp(input.date, input.breakStart, breakStartDay),
     breakEnd: timestamp(input.date, input.breakEnd, breakEndDay),
