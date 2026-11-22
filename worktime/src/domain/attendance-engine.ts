@@ -52,6 +52,18 @@ export function calculateAttendance(input: AttendanceInput): AttendanceResult {
   if (!Number.isInteger(input.policy.fullShiftUnpaidBreakMinutes) || input.policy.fullShiftUnpaidBreakMinutes < 0) {
     throw new Error('固定休息扣除分钟数必须是非负整数');
   }
+  if (input.policy.fullShiftThresholdMinutes !== undefined &&
+      (!Number.isSafeInteger(input.policy.fullShiftThresholdMinutes) || input.policy.fullShiftThresholdMinutes < 1)) {
+    throw new Error('完整班次判定分钟数必须是正整数');
+  }
+  if (input.policy.lateGraceMinutes !== undefined &&
+      (!Number.isSafeInteger(input.policy.lateGraceMinutes) || input.policy.lateGraceMinutes < 0)) {
+    throw new Error('迟到宽限分钟数必须是非负整数');
+  }
+  if (input.policy.earlyLeaveGraceMinutes !== undefined &&
+      (!Number.isSafeInteger(input.policy.earlyLeaveGraceMinutes) || input.policy.earlyLeaveGraceMinutes < 0)) {
+    throw new Error('早退宽限分钟数必须是非负整数');
+  }
 
   const events = input.punches.map(p => ({ ...p, epoch: toEpoch(p.at) }))
     .sort((a, b) => a.epoch - b.epoch);
@@ -112,7 +124,14 @@ export function calculateAttendance(input: AttendanceInput): AttendanceResult {
   }
   let actualBreakMs = 0;
   for (const [bs, be] of mergedBreaks) {
-    for (const [a, b] of work) actualBreakMs += overlap(a, b, bs, be);
+    // Breaks outside the scheduled window (for example during overtime) must
+    // never reduce regular payable minutes.
+    const scheduledBreakStart = Math.max(bs, start);
+    const scheduledBreakEnd = Math.min(be, end);
+    if (scheduledBreakEnd <= scheduledBreakStart) continue;
+    for (const [a, b] of work) {
+      actualBreakMs += overlap(a, b, scheduledBreakStart, scheduledBreakEnd);
+    }
   }
   const scheduledMinutes = minutes(end - start);
   const threshold = input.policy.fullShiftThresholdMinutes ?? scheduledMinutes;
